@@ -85,7 +85,6 @@ function PasswordModal({ user, onClose }: { user: AdminUser; onClose: () => void
 }
 
 function DeleteModal({ user, onClose, onConfirm }: { user: AdminUser; onClose: () => void; onConfirm: () => void }) {
-  const { showToast } = useToast();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

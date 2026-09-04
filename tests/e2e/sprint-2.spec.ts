@@ -31,9 +31,6 @@ test("CP-13 — Mes sin datos muestra grid vacío", async ({ page }) => {
     await expect(page.locator("table").first()).toBeVisible({ timeout: 10_000 });
 
     const emptyMonthOffset = await page.evaluate(async () => {
-      const stored = localStorage.getItem("activeProject");
-      const project = stored ? (JSON.parse(stored) as { id: string }) : null;
-      const projectParam = "";
       for (let offset = 1; offset <= 24; offset++) {
         const date = new Date(Date.UTC(2026, 4 + offset, 1));
         const year = date.getUTCFullYear();

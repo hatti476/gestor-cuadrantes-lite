@@ -88,6 +88,7 @@ describe("Prep Toggle Logic (Bug 1: handleCellClick with prepStep)", () => {
   const handleCellClick = async (
     employeeId: string,
     date: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _currentShift?: string
   ) => {
     if (prepStep === "vacaciones" || prepStep === "libres") {
