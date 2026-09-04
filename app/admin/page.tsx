@@ -84,6 +84,58 @@ function PasswordModal({ user, onClose }: { user: AdminUser; onClose: () => void
   );
 }
 
+function DeleteModal({ user, onClose, onConfirm }: { user: AdminUser; onClose: () => void; onConfirm: () => void }) {
+  const { showToast } = useToast();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConfirm() {
+    setDeleting(true); setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally { setDeleting(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-80 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800">Eliminar usuario</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg" disabled={deleting}>×</button>
+        </div>
+        <p className="text-xs text-gray-500">{user.employee?.name ?? user.email}</p>
+        <p className="text-sm text-gray-600">
+          ¿Eliminar a <strong>{user.employee?.name ?? user.email}</strong>?
+          <br />Se borrarán <strong>todos sus datos</strong> (turnos, historial, empleado).
+          <br /><span className="text-red-600">No se puede deshacer.</span>
+        </p>
+        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={deleting}
+            className="text-sm px-4 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? "Eliminando..." : "Eliminar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserModal({
   user, onClose, onSaved,
 }: {
@@ -240,6 +292,7 @@ function UserModal({
 }
 
 function UsersTab() {
+  const { data: session } = useSession();
   const { showToast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,6 +301,7 @@ function UsersTab() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [editingUser, setEditingUser] = useState<AdminUser | null | "new">(null);
   const [passwordUser, setPasswordUser] = useState<AdminUser | null>(null);
+  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -262,6 +316,21 @@ function UsersTab() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadUsers(); }, [loadUsers]);
+
+  async function handleDelete(user: AdminUser) {
+    if (!user.id || user.id === session?.user?.id) return;
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error ?? "Error eliminando usuario");
+      }
+      showToast("Usuario eliminado", "success");
+      await loadUsers();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Error", "error");
+    }
+  }
 
   const filtered = users.filter((u) => {
     const nm = u.employee?.name ?? "";
@@ -337,6 +406,15 @@ function UsersTab() {
                           Contraseña
                         </button>
                         <button onClick={() => setEditingUser(u)} className="text-xs px-3 py-1.5 border border-gray-200 rounded text-gray-600 hover:bg-gray-50">Editar</button>
+                        {u.id !== session?.user?.id && (
+                          <button
+                            data-testid={`btn-delete-user-${u.id}`}
+                            onClick={() => setDeleteUser(u)}
+                            className="text-xs px-3 py-1.5 border border-red-200 rounded text-red-600 hover:bg-red-50"
+                          >
+                            Eliminar
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -350,6 +428,13 @@ function UsersTab() {
         <UserModal user={editingUser === "new" ? null : editingUser} onClose={() => setEditingUser(null)} onSaved={() => { void loadUsers(); }} />
       )}
       {passwordUser && <PasswordModal user={passwordUser} onClose={() => setPasswordUser(null)} />}
+      {deleteUser && (
+        <DeleteModal
+          user={deleteUser}
+          onClose={() => setDeleteUser(null)}
+          onConfirm={() => handleDelete(deleteUser)}
+        />
+      )}
     </div>
   );
 }

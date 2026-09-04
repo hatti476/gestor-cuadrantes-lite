@@ -154,3 +154,43 @@ export async function PUT(
 
   return NextResponse.json({ ok: true });
 }
+
+// ---------------------------------------------------------------------------
+// DELETE /api/admin/users/[id] — eliminar usuario completamente. Solo ADMIN.
+// Elimina User + Employee + ShiftAssignments en transacción.
+// No permite auto-eliminación (id === session.user.id).
+// ---------------------------------------------------------------------------
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Prohibido: solo ADMIN" }, { status: 403 });
+
+  const { id } = await params;
+
+  // Prevenir auto-eliminación
+  if (id === session.user.id) {
+    return NextResponse.json({ error: "No puedes eliminarte a ti mismo" }, { status: 400 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: { employee: true },
+  });
+  if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+
+  await prisma.$transaction(async (tx) => {
+    if (user.employee) {
+      // Eliminar asignaciones de turno asociadas al employee
+      await tx.shiftAssignment.deleteMany({ where: { employeeId: user.employee.id } });
+      // Eliminar employee
+      await tx.employee.delete({ where: { id: user.employee.id } });
+    }
+    // Eliminar user
+    await tx.user.delete({ where: { id } });
+  });
+
+  return NextResponse.json({ ok: true });
+}

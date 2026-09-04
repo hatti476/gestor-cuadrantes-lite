@@ -40,14 +40,15 @@ test("CP-02 — Login con credenciales incorrectas muestra error @smoke", async 
 // ===========================================================================
 // CP-03 — Login admin correcto
 // ===========================================================================
-test("CP-03 — Login admin correcto redirige a / con badge SUPER_ADMIN @smoke", async ({ page }) => {
+test("CP-03 — Login admin correcto redirige a / con badge ADMIN @smoke", async ({ page }) => {
   try {
     await login(page, ADMIN.email, ADMIN.password);
 
     await expect(page).toHaveURL("/");
     await expect(page.getByText(ADMIN.email)).toBeVisible();
-    // Buscamos el badge exacto del header (span con texto "SUPER_ADMIN" en mayúsculas)
-    await expect(page.locator("header span").filter({ hasText: /^SUPER_ADMIN$/ })).toBeVisible();
+    // El badge se renderiza como "Admin" y se muestra en mayusculas via CSS
+    // (text-transform: uppercase), por eso comparamos sin distinguir caso.
+    await expect(page.getByTestId("role-badge")).toHaveText(/^Admin$/i);
   } catch (e) {
     await screenshotOnFail(page, "CP-03");
     throw e;
@@ -57,12 +58,12 @@ test("CP-03 — Login admin correcto redirige a / con badge SUPER_ADMIN @smoke",
 // ===========================================================================
 // CP-04 — Login técnico correcto
 // ===========================================================================
-test("CP-04 — Login técnico correcto muestra badge USER", async ({ page }) => {
+test("CP-04 — Login técnico correcto muestra badge TECNICO @smoke", async ({ page }) => {
   try {
     await login(page, TECH.email, TECH.password);
 
     await expect(page).toHaveURL("/");
-    await expect(page.getByText("USER")).toBeVisible();
+    await expect(page.getByText("TECNICO")).toBeVisible();
   } catch (e) {
     await screenshotOnFail(page, "CP-04");
     throw e;
@@ -149,8 +150,9 @@ test("CP-08 — Columnas de fin de semana tienen fondo azul claro", async ({ pag
     await expect(page.locator("table").first()).toBeVisible({ timeout: 10_000 });
 
     // Mayo 2026: 10 días de fin de semana (4 sábados + 5 domingos — 31 días)
-    // Los th de días de fin de semana tienen clase bg-blue-100
-    const weekendHeaders = page.locator("table").first().locator("thead tr th.bg-blue-100");
+    // Los th de fin de semana usan bg-blue-200 (schedule-grid.tsx:105).
+    // Ojo: bg-blue-100 es la celda del cuerpo, no la cabecera.
+    const weekendHeaders = page.locator("table").first().locator("thead tr th.bg-blue-200");
     await expect(weekendHeaders.first()).toBeVisible({ timeout: 5_000 });
     const count = await weekendHeaders.count();
     // Mayo 2026 tiene 9 fines de semana (sábados y domingos)

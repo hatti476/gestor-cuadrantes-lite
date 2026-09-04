@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Artefactos generados por Playwright (reportes HTML, trazas, capturas).
+    // Son bundles minificados de terceros: lintarlos solo genera ruido.
+    "tests/report/**",
+    "tests/report-docker/**",
+    "tests/screenshots/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

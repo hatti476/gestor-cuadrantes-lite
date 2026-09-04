@@ -1,5 +1,9 @@
 FROM node:20-alpine
 
+# openssl: requerido por el query engine de Prisma. Sin el, Prisma no puede
+# detectar la version de OpenSSL y falla al cargar libquery_engine.
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 COPY package*.json ./

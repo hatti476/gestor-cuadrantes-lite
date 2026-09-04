@@ -8,7 +8,9 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - sqlite_data:/app/prisma
+      # NO montar un volumen nombrado en /app/prisma: taparia el bind mount y
+      # dejaria schema.prisma y la BD aislados del host (schema obsoleto y
+      # dev.db inalcanzable para el seed de los tests E2E).
     env_file:
       - .env
     environment:
@@ -20,6 +22,3 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
-volumes:
-  sqlite_data:

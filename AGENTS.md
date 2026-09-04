@@ -173,6 +173,46 @@ Cuando el DM adjunte una captura de pantalla de un bug:
 
 ---
 
+## FLUJO DE GIT Y BRANCHES
+
+### Regla principal: **Nunca pusher directamente a `main`**
+
+Para cada sprint/nueva funcionalidad:
+
+1. **Crear rama de feature** al iniciar:
+   ```bash
+   git checkout -b sprint-<N>-<descripcion-corta>
+   # o: feature/<descripcion>, fix/<descripcion>, etc.
+   ```
+
+2. **Desarrollar en la rama** — commits normales, pushes a la feature branch
+
+3. **Al terminar el sprint**: crear Pull Request / Merge Request
+   - Base: `main`
+   - Head: `sprint-<N>-<descripcion>`
+   - Título: `Sprint N: <resumen>`
+   - Body: cambios, tests, notas
+
+4. **Revisión obligatoria** antes de merge:
+   - @devlead revisa código
+   - @security revisa (si aplica)
+   - @qa ejecuta suite completa (@smoke + unit + e2e)
+
+5. **Merge solo via PR/MR** — squash o merge commit, no fast-forward directo
+
+### Nombrado de ramas:
+- `sprint-<N>-<slug>` — sprints completos
+- `feat/<slug>` — features individuales
+- `fix/<slug>` — hotfixes
+- `chore/<slug>` — mantenimiento
+
+### Protección de `main`:
+- Requerir PR reviews (mínimo 1)
+- Requerir status checks (lint, typecheck, tests)
+- No permitir force push
+
+---
+
 ## ACTUALIZACIÓN DE ESTE FICHERO
 
 Revisar y actualizar AGENTS.md al final de cada sprint si:

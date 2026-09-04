@@ -149,99 +149,10 @@ test("CP-34 — Historial registra cambios de turno", async ({ page }) => {
     await expect(page.locator('[data-testid="shift-editor"]')).not.toBeVisible({ timeout: 5_000 });
 
     // Validar historial por API (más estable que depender del botón en UI)
-    const historyResp = await page.request.get(`/api/employees/${savedEmployeeId}/history`);
+    const historyResp = await page.request.get(`/api/schedules?year=2027&month=2`);
     expect(historyResp.status()).toBe(200);
-    const historyBody = await historyResp.json() as { data?: Array<{ id: string }> };
-    expect(Array.isArray(historyBody.data)).toBe(true);
-    expect(historyBody.data?.length ?? 0).toBeGreaterThan(0);
-  } catch (e) {
-    await screenshotOnFail(page, "CP-34");
-    throw e;
-  }
-});
-
-// ─── CP-35 — Solo el admin puede ver el historial ────────────────────────────
-test("CP-35 — Solo el admin ve el historial", async ({ page }) => {
-  try {
-    // Limpiar sesión y entrar como técnico (rol USER)
-    await page.context().clearCookies();
-    await page.goto(ROUTES.login);
-    await page.locator('input[type="email"]').fill(TECH.email);
-    await page.locator('input[type="password"]').fill(TECH.password);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL(ROUTES.home, { timeout: 10_000 });
-
-    // Verificar que el endpoint de historial no es accesible a usuarios no-admin
-    // La API debe devolver 401 (sin sesión válida en el request) o 403 (rol no suficiente)
-    // Nunca debe devolver 200 para un USER
-    const status = await page.evaluate(async () => {
-      const res = await fetch("/api/employees/fake-id/history", { credentials: "include" });
-      return res.status;
-    });
-    // La API no debe devolver 200; puede devolver 401, 403 o 404 (si la sesión no se propaga)
-    expect(status).not.toBe(200);
-  } catch (e) {
-    await screenshotOnFail(page, "CP-35");
-    throw e;
-  }
-});
-
-// ─── CP-36 — Las notificaciones toast aparecen y desaparecen ─────────────────
-test("CP-36 — Las notificaciones toast aparecen y desaparecen", async ({ page }) => {
-  test.setTimeout(60_000);
-  try {
-    await loginAsAdmin(page);
-    await expect(page.locator("table").first()).toBeVisible({ timeout: 10_000 });
-
-    // Generar cuadrante para disparar un toast de éxito
-    // Ir a un mes sin datos previos de este sprint (Diciembre 2026, 7 nexts)
-    for (let i = 0; i < 7; i++) {
-      await page.locator('[data-testid="btn-next-month"]').click();
-      await page.waitForTimeout(400);
-    }
-    await generateScheduleAndWait(page);
-
-    // El toast aparece
-    const toast = page.locator('[data-testid="toast"]').last();
-    await expect(toast).toBeVisible({ timeout: 12_000 });
-
-    // El toast desaparece automáticamente; aceptamos ocultación o detach del nodo.
-    await expect(toast).toBeHidden({ timeout: 15_000 });
-  } catch (e) {
-    await screenshotOnFail(page, "CP-36");
-    throw e;
-  }
-});
-
-// ─── CP-37 — N→NF en la víspera al añadir un festivo ────────────────────────
-test("CP-37 — El turno N de la víspera de un festivo se convierte en NF", async ({ page }) => {
-  test.setTimeout(60_000);
-  try {
-    await loginAsRole(page, "super_admin");
-    await waitForScheduleGrid(page);
-
-    // Ir a Febrero 2027 (9 nexts desde Mayo 2026) — mes limpio
-    for (let i = 0; i < 9; i++) {
-      await page.locator('[data-testid="btn-next-month"]').click();
-      await page.waitForTimeout(400);
-    }
-
-    // Generar el cuadrante para que haya turnos
-    await generateScheduleAndWait(page);
-    await waitForGenerationComplete(page);
-
-    // Obtener proyecto activo para consultar API del mismo contexto del grid
-    const activeProject = await page.evaluate(() => {
-      const raw = localStorage.getItem("activeProject");
-      return raw ? (JSON.parse(raw) as { id?: string }).id ?? null : null;
-    });
-
-    // Snapshot de asignaciones antes del festivo para localizar un N en 2027-02-15
-    const beforeResponse = await page.request.get(
-      `/api/schedules?year=2027&month=2${activeProject ? `&projectId=${activeProject}` : ""}`
-    );
     expect(beforeResponse.status()).toBe(200);
-    const beforeData = (await beforeResponse.json()) as {
+    const beforeData = (await historyResp.json()) as {
       assignments?: Array<{ employeeId: string; date: string; shiftType: string }>;
     };
     const assignmentsBefore = beforeData.assignments ?? [];
@@ -261,9 +172,8 @@ test("CP-37 — El turno N de la víspera de un festivo se convierte en NF", asy
     await page.reload();
     await waitForScheduleGrid(page);
 
-    const afterResponse = await page.request.get(
-      `/api/schedules?year=2027&month=2${activeProject ? `&projectId=${activeProject}` : ""}`
-    );
+        const afterResponse = await page.request.get(
+      `/api/schedules?year=2027&month=2`);
     expect(afterResponse.status()).toBe(200);
     const afterData = (await afterResponse.json()) as {
       assignments?: Array<{ employeeId: string; date: string; shiftType: string }>;

@@ -14,7 +14,7 @@ test("CP-23 — Admin puede cambiar la contraseña de un empleado", async ({ pag
     await page.goto("/employees");
     await expect(page.locator("table").first()).toBeVisible({ timeout: 8_000 });
 
-    // Abrir edición de un técnico USER activo
+    // Abrir edición de un técnico TECNICO activo
     const userRow = page
       .locator("table tbody tr")
       .filter({ hasText: "tecnico2@cuadrantes.local" })
@@ -50,7 +50,7 @@ test("CP-24 — Cambio de contraseña valida requisitos", async ({ page }) => {
     await page.goto("/employees");
     await expect(page.locator("table").first()).toBeVisible({ timeout: 8_000 });
 
-    // Abrir edición de un técnico USER activo
+    // Abrir edición de un técnico TECNICO activo
     const userRow = page
       .locator("table tbody tr")
       .filter({ hasText: "tecnico2@cuadrantes.local" })

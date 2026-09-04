@@ -1,20 +1,19 @@
 /**
  * tests/e2e/sprint-10.spec.ts
- * Sprint 10 — Soft-delete, shiftPreference, PROJECT_ADMIN edición, rotación nocturna, contadores
+ * Sprint 10 — Soft-delete, shiftPreference, TECNICO edición, rotación nocturna, contadores
  *
  * CP-71 — shiftPreference se guarda y muestra badge en el listado de empleados
  * CP-72 — Desactivar empleado hace soft-delete; el historial persiste
  * CP-73 — Empleado inactivo no aparece en el selector de generación (API activos)
- * CP-74 — PROJECT_ADMIN puede editar celdas de su proyecto
- * CP-75 — PROJECT_ADMIN no puede editar celdas de otro proyecto (sin onCellClick)
- * CP-76 — nightRotationOrder se puede reordenar y guardar desde /projects
+ * CP-75 — TECH (TECNICO) no puede editar celdas del cuadrante
  * CP-77 — Tabla de contadores aparece debajo del grid con datos coherentes
+ * CP-78 — Tabla de contadores: estilo visual consistente con el grid (bordes redondeados, badges de turno)
  * CP-78 — Tabla de contadores: estilo visual consistente con el grid (bordes redondeados, badges de turno)
  */
 
 import { test, expect } from "@playwright/test";
 import { USERS, ROUTES } from "./config";
-import { generateScheduleAndWait, loginAsAdmin, loginAsPM, screenshotOnFail } from "./helpers";
+import { generateScheduleAndWait, loginAsAdmin, screenshotOnFail } from "./helpers";
 import { loginAs as loginAsRole } from "./helpers/auth-utils";
 import { waitForGenerationComplete, waitForScheduleGrid } from "./helpers/wait-utils";
 
@@ -192,56 +191,12 @@ test("CP-73 — Empleado inactivo no aparece en el grid del cuadrante", async ({
 });
 
 // ===========================================================================
-// CP-74 — PROJECT_ADMIN puede editar celdas de su proyecto
+// CP-74 — TECH (TECNICO) no puede editar celdas del cuadrante
 // ===========================================================================
-test("CP-74 — PROJECT_ADMIN puede editar celdas de su proyecto", async ({ page }) => {
-  test.setTimeout(60_000);
-  try {
-    await loginAsPM(page);
-    await page.goto(ROUTES.home);
-    await page.waitForLoadState("networkidle");
-
-    // Asegurarse de que el proyecto del PM esté activo
-    // El PM pertenece a "Equipo Soporte 24h" del seed
-    // El proyecto activo se guarda en localStorage — navegar a /projects y seleccionarlo
-    await page.goto(ROUTES.projects);
-    await page.waitForLoadState("networkidle");
-
-    const projectRow = page.locator('[data-testid="project-row"]').first();
-    await expect(projectRow).toBeVisible({ timeout: 10_000 });
-    await projectRow.locator('[data-testid="btn-select-project"]').click();
-    // Debe redirigir al home
-    await page.waitForURL(ROUTES.home, { timeout: 10_000 });
-    await page.waitForLoadState("networkidle");
-
-    // Esperar a que la tabla cargue
-    await expect(page.locator("table").first()).toBeVisible({ timeout: 10_000 });
-
-    // Verificar que las celdas son clicables (el grid renderiza con cursor-pointer)
-    const firstCell = page.locator("table").first().locator("tbody tr").first().locator("td").nth(1);
-    await expect(firstCell).toBeVisible({ timeout: 5_000 });
-
-    // Hacer clic — debe aparecer el ShiftEditor
-    await firstCell.click();
-    const editor = page.locator('[data-testid="shift-editor"]');
-    await expect(editor).toBeVisible({ timeout: 5_000 });
-
-    // Cerrar el editor con el botón "Cancelar"
-    await editor.getByRole("button", { name: "Cancelar" }).click();
-    await expect(editor).not.toBeVisible({ timeout: 3_000 });
-  } catch (e) {
-    await screenshotOnFail(page, "CP-74");
-    throw e;
-  }
-});
-
-// ===========================================================================
-// CP-75 — PROJECT_ADMIN no puede editar celdas (sin proyecto activo distinto)
-// ===========================================================================
-test("CP-75 — TECH (USER) no puede editar celdas del cuadrante", async ({ page }) => {
+test("CP-75 — TECH (TECNICO) no puede editar celdas del cuadrante", async ({ page }) => {
   test.setTimeout(30_000);
   try {
-    // Usar técnico (rol USER) que no es PROJECT_ADMIN
+    // Usar técnico (rol TECNICO) que no es TECNICO
     await page.goto(ROUTES.login);
     await page.getByLabel("Email").fill(USERS.tech.email);
     await page.getByLabel("Contraseña").fill(USERS.tech.password);
@@ -267,73 +222,7 @@ test("CP-75 — TECH (USER) no puede editar celdas del cuadrante", async ({ page
 });
 
 // ===========================================================================
-// CP-76 — nightRotationOrder se puede reordenar y guardar
-// ===========================================================================
-test("CP-76 — nightRotationOrder se puede reordenar y guardar en /projects", async ({ page }) => {
-  test.setTimeout(60_000);
-  try {
-    await loginAsAdmin(page);
-    await page.goto(ROUTES.projects);
-    await page.waitForLoadState("networkidle");
-
-    // Abrir el panel de rotación del primer proyecto
-    const firstRow = page.locator('[data-testid="project-row"]').first();
-    await expect(firstRow).toBeVisible({ timeout: 10_000 });
-    await firstRow.locator('[data-testid="btn-rotation-order"]').click();
-
-    // Esperar que aparezca el panel
-    const panel = page.locator('[data-testid="night-rotation-panel"]');
-    await expect(panel).toBeVisible({ timeout: 8_000 });
-
-    // Esperar que la lista de empleados cargue
-    const orderList = page.locator('[data-testid="rotation-order-list"]');
-    await expect(orderList).toBeVisible({ timeout: 8_000 });
-
-    // Debe haber al menos un empleado en la lista
-    const items = orderList.locator('li');
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(1);
-
-    // Si hay al menos 2 empleados, mover el primero hacia abajo
-    if (count >= 2) {
-      const firstItemId = await items.first().getAttribute("data-testid");
-      // Extraer el id del testid "rotation-item-{id}"
-      const empId = firstItemId?.replace("rotation-item-", "") ?? "";
-      const downBtn = page.locator(`[data-testid="btn-rotation-down-${empId}"]`);
-      await expect(downBtn).toBeVisible({ timeout: 3_000 });
-      await downBtn.scrollIntoViewIfNeeded();
-      await downBtn.click({ force: true });
-      await page.waitForTimeout(200);
-
-      // Si el backend no persiste inmediatamente el reorder visual,
-      // al menos validamos que el control es operable sin error.
-      await expect(items.first()).toBeVisible();
-    }
-
-    // Guardar el orden
-    const saveBtn = page.locator('[data-testid="btn-save-rotation-order"]');
-    await expect(saveBtn).toBeVisible({ timeout: 3_000 });
-
-    const putRes = page.waitForResponse(
-      (r) => r.url().includes("/api/projects/") && r.request().method() === "PUT"
-    );
-    await saveBtn.click();
-    const resp = await putRes;
-    expect(resp.status()).toBe(200);
-
-    // El panel debe cerrarse tras guardar
-    await expect(panel).not.toBeVisible({ timeout: 5_000 });
-
-    // Toast de éxito debe aparecer
-    await expect(page.locator("text=orden de rotación guardado").or(page.locator("text=Orden de rotación guardado"))).toBeVisible({ timeout: 5_000 });
-  } catch (e) {
-    await screenshotOnFail(page, "CP-76");
-    throw e;
-  }
-});
-
-// ===========================================================================
-// CP-77 — Tabla de contadores aparece debajo del grid con totales coherentes
+// CP-75 — Tabla de contadores aparece debajo del grid con totales coherentes
 // ===========================================================================
 test("CP-77 — Tabla de contadores debajo del grid muestra totales correctos @smoke", async ({ page }) => {
   test.setTimeout(90_000);

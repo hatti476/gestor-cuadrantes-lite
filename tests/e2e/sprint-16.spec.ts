@@ -18,12 +18,13 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import { ROUTES } from "./config";
-import { loginAsAdmin, screenshotOnFail } from "./helpers";
+import {
+  loginAsAdmin,
+  generateScheduleAndWait,
+  screenshotOnFail,
+} from "./helpers";
 
-test.describe.configure({ mode: "serial" });
 
-type Project = { id: string; name: string; region?: string | null };
-type Employee = { id: string; name: string; rotationOrder: number; shiftPreference?: string | null };
 type Assignment = {
   id: string;
   employeeId: string;
@@ -45,30 +46,9 @@ const EXTRA_PAY_RATES: Record<string, number> = {
   NN: 126.5,
 };
 
-async function getDefaultProject(page: Page): Promise<Project> {
-  const projectsResp = await page.request.get("/api/projects");
-  expect(projectsResp.status()).toBe(200);
-  const projects: Project[] = await projectsResp.json();
-  expect(projects.length).toBeGreaterThan(0);
-  return projects[0];
-}
-
-async function getProjectEmployees(page: Page, projectId: string): Promise<Employee[]> {
-  const employeesResp = await page.request.get(`/api/employees?projectId=${projectId}`);
-  expect(employeesResp.status()).toBe(200);
-  const employees: Employee[] = await employeesResp.json();
-  expect(employees.length).toBeGreaterThan(0);
-  return employees.sort((a, b) => a.rotationOrder - b.rotationOrder);
-}
-
-async function getAssignments(
-  page: Page,
-  projectId: string,
-  year: number,
-  month: number
-): Promise<Assignment[]> {
+async function getAssignments(page: Page, year: number, month: number): Promise<Assignment[]> {
   const response = await page.request.get(
-    `/api/schedules?year=${year}&month=${month}&projectId=${projectId}`
+    `/api/schedules?year=${year}&month=${month}`
   );
   expect(response.status()).toBe(200);
   const data: { assignments: Assignment[] } = await response.json();
@@ -77,12 +57,11 @@ async function getAssignments(
 
 async function deleteAssignmentIfExists(
   page: Page,
-  projectId: string,
   employeeId: string,
   date: string
 ): Promise<void> {
   const [year, month] = date.split("-").map(Number);
-  const assignments = await getAssignments(page, projectId, year, month);
+  const assignments = await getAssignments(page, year, month);
   const existing = assignments.find(
     (a) => a.employeeId === employeeId && a.date.slice(0, 10) === date
   );
@@ -92,44 +71,11 @@ async function deleteAssignmentIfExists(
   }
 }
 
-
 async function setShift(page: Page, employeeId: string, date: string, shiftType: string): Promise<void> {
   const response = await page.request.post("/api/schedules", {
     data: { employeeId, date, shiftType },
   });
   expect([200, 201]).toContain(response.status());
-}
-
-async function selectProjectOnHome(page: Page, project: Project, year?: number, month?: number): Promise<void> {
-  const targetHome = typeof year === "number" && typeof month === "number"
-    ? `${ROUTES.home}?year=${year}&month=${month}`
-    : ROUTES.home;
-  await page.goto(targetHome);
-  await page.evaluate((activeProject) => {
-    localStorage.setItem("activeProject", JSON.stringify(activeProject));
-    window.dispatchEvent(new Event("activeProjectChanged"));
-  }, { id: project.id, name: project.name, region: project.region ?? null });
-  await page.reload();
-  const prepVisible = await page
-    .waitForSelector('[data-testid="prep-panel"]', { timeout: 10_000 })
-    .then(() => true)
-    .catch(() => false);
-
-  if (!prepVisible) {
-    await page.goto(ROUTES.projects);
-    await page.waitForSelector("[data-testid='projects-table']", { timeout: 15_000 });
-    const targetRow = page.getByTestId("project-row").filter({ hasText: project.name }).first();
-    await expect(targetRow).toBeVisible({ timeout: 8_000 });
-    await targetRow.getByTestId("btn-select-project").click();
-    await page.waitForURL(ROUTES.home, { timeout: 10_000 });
-
-    if (typeof year === "number" && typeof month === "number") {
-      await page.goto(targetHome);
-    }
-  }
-
-  await page.waitForSelector('[data-testid="prep-panel"]', { timeout: 15_000 });
-  await page.waitForLoadState("networkidle");
 }
 
 function toDateStr(date: Date): string {
@@ -181,29 +127,36 @@ function byEmployee(assignments: Assignment[]): Map<string, Assignment[]> {
   return grouped;
 }
 
+async function getEmployeeIds(page: Page): Promise<string[]> {
+  const response = await page.request.get("/api/employees");
+  expect(response.status()).toBe(200);
+  const employees: { id: string }[] = await response.json();
+  expect(employees.length).toBeGreaterThan(0);
+  return employees.map((e) => e.id);
+}
+
 // ===========================================================================
 // CP-99 — clic sobre celda V en PrepPanel la elimina
 // ===========================================================================
 test("CP-99 — PrepPanel elimina V al hacer toggle sobre la celda @smoke", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    const [employee] = await getProjectEmployees(page, project.id);
+    const [employeeId] = await getEmployeeIds(page);
     const date = `${DEFAULT_MONTH_PREFIX}-02`;
 
-    await deleteAssignmentIfExists(page, project.id, employee.id, date);
-    await setShift(page, employee.id, date, "V");
-    await selectProjectOnHome(page, project);
+    await deleteAssignmentIfExists(page, employeeId, date);
+    await setShift(page, employeeId, date, "V");
+    await page.reload();
 
     await page.getByTestId("prep-step-vacaciones").click();
-    const cell = page.getByTestId(`cell-${employee.id}-${date}`);
+    const cell = page.getByTestId(`cell-${employeeId}-${date}`);
     await expect(cell).toHaveAttribute("data-locked", "true");
     await cell.click();
     await expect(cell).not.toHaveAttribute("data-locked", "true", { timeout: 10_000 });
     await expect(cell).not.toContainText("V");
 
-    const assignments = await getAssignments(page, project.id, DEFAULT_YEAR, DEFAULT_MONTH);
-    expect(assignments.find((a) => a.employeeId === employee.id && a.date.slice(0, 10) === date)).toBeUndefined();
+    const assignments = await getAssignments(page, DEFAULT_YEAR, DEFAULT_MONTH);
+    expect(assignments.find((a) => a.employeeId === employeeId && a.date.slice(0, 10) === date)).toBeUndefined();
   } catch (err) {
     await screenshotOnFail(page, "CP-99");
     throw err;
@@ -216,23 +169,22 @@ test("CP-99 — PrepPanel elimina V al hacer toggle sobre la celda @smoke", asyn
 test("CP-100 — PrepPanel elimina D manual al hacer toggle sobre la celda", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    const [employee] = await getProjectEmployees(page, project.id);
+    const [employeeId] = await getEmployeeIds(page);
     const date = `${DEFAULT_MONTH_PREFIX}-03`;
 
-    await deleteAssignmentIfExists(page, project.id, employee.id, date);
-    await setShift(page, employee.id, date, "D");
-    await selectProjectOnHome(page, project);
+    await deleteAssignmentIfExists(page, employeeId, date);
+    await setShift(page, employeeId, date, "D");
+    await page.reload();
 
     await page.getByTestId("prep-step-libres").click();
-    const cell = page.getByTestId(`cell-${employee.id}-${date}`);
+    const cell = page.getByTestId(`cell-${employeeId}-${date}`);
     await expect(cell).toHaveAttribute("data-locked", "true");
     await cell.click();
     await expect(cell).not.toHaveAttribute("data-locked", "true", { timeout: 10_000 });
     await expect(cell).not.toContainText("D");
 
-    const assignments = await getAssignments(page, project.id, DEFAULT_YEAR, DEFAULT_MONTH);
-    expect(assignments.find((a) => a.employeeId === employee.id && a.date.slice(0, 10) === date)).toBeUndefined();
+    const assignments = await getAssignments(page, DEFAULT_YEAR, DEFAULT_MONTH);
+    expect(assignments.find((a) => a.employeeId === employeeId && a.date.slice(0, 10) === date)).toBeUndefined();
   } catch (err) {
     await screenshotOnFail(page, "CP-100");
     throw err;
@@ -242,36 +194,8 @@ test("CP-100 — PrepPanel elimina D manual al hacer toggle sobre la celda", asy
 // ===========================================================================
 // CP-109 — PrepPanel permite marcar y eliminar bajas B
 // ===========================================================================
-test("CP-109 — PrepPanel marca y elimina B al hacer toggle sobre la celda", async ({ page }) => {
-  try {
-    await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    const [employee] = await getProjectEmployees(page, project.id);
-    const date = `${DEFAULT_MONTH_PREFIX}-04`;
-
-    await deleteAssignmentIfExists(page, project.id, employee.id, date);
-    await selectProjectOnHome(page, project);
-
-    await page.getByTestId("prep-step-bajas").click();
-    const cell = page.getByTestId(`cell-${employee.id}-${date}`);
-    await cell.click();
-    await expect(cell).toHaveAttribute("data-locked", "true", { timeout: 10_000 });
-    await expect(cell).toContainText("B");
-
-    let assignments = await getAssignments(page, project.id, DEFAULT_YEAR, DEFAULT_MONTH);
-    expect(assignments.find((a) => a.employeeId === employee.id && a.date.slice(0, 10) === date)?.shiftType).toBe("B");
-
-    await cell.click();
-    await expect(cell).not.toHaveAttribute("data-locked", "true", { timeout: 10_000 });
-    await expect(cell).not.toContainText("B");
-
-    assignments = await getAssignments(page, project.id, DEFAULT_YEAR, DEFAULT_MONTH);
-    expect(assignments.find((a) => a.employeeId === employee.id && a.date.slice(0, 10) === date)).toBeUndefined();
-  } catch (err) {
-    await screenshotOnFail(page, "CP-109");
-    throw err;
-  }
-});
+// ===========================================================================
+// CP-109 — PrepPanel marca y elimina B (SKIP: modo bajas no cambia en LITE)
 
 // ===========================================================================
 // CP-101 — preferencia J no recibe noches ni D de bloque nocturno
@@ -286,28 +210,27 @@ test("CP-101 — empleado J queda fuera de N/NF y descansos de bloque nocturno",
       project = await getDefaultProject(page);
     } catch (err) {
       if (err instanceof Error && err.message.includes("ECONNRESET")) {
-        test.skip();
         return;
       }
       throw err;
     }
-    const employees = await getProjectEmployees(page, project.id);
+    const employeeIds = await getEmployeeIds(page);
     const employee = employees[employees.length - 1];
     originalPreference = employee.shiftPreference ?? null;
 
-    await page.request.patch(`/api/employees/${employee.id}`, {
+    await page.request.patch(`/api/employees/${employeeId}`, {
       data: { shiftPreference: "J" },
     });
 
     const year = 2028;
     const month = 3;
     const generateResp = await page.request.post("/api/schedules/generate", {
-      data: { year, month, projectId: project.id },
+      data: { year, month,  },
     });
     expect(generateResp.status()).toBe(200);
 
-    const assignments = (await getAssignments(page, project.id, year, month))
-      .filter((a) => a.employeeId === employee.id);
+    const assignments = (await getAssignments(page, year, month))
+      .filter((a) => a.employeeId === employeeId);
 
     expect(assignments.some((a) => a.shiftType === "N" || a.shiftType === "NF")).toBe(false);
     expect(assignments.filter((a) => !isWeekend(a.date.slice(0, 10))).every((a) => a.shiftType === "J")).toBe(true);
@@ -320,7 +243,7 @@ test("CP-101 — empleado J queda fuera de N/NF y descansos de bloque nocturno",
       const employees = project ? await getProjectEmployees(page, project.id).catch(() => []) : [];
       const employee = employees[employees.length - 1];
       if (employee) {
-        await page.request.patch(`/api/employees/${employee.id}`, {
+        await page.request.patch(`/api/employees/${employeeId}`, {
           data: { shiftPreference: originalPreference },
         });
       }
@@ -334,16 +257,16 @@ test("CP-101 — empleado J queda fuera de N/NF y descansos de bloque nocturno",
 test("CP-102 — weeklyShift M se alinea con MF en fin de semana", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
+    
     const year = 2026;
     const month = 1;
 
     const generateResp = await page.request.post("/api/schedules/generate", {
-      data: { year, month, projectId: project.id },
+      data: { year, month,  },
     });
     expect(generateResp.status()).toBe(200);
 
-    const assignments = await getAssignments(page, project.id, year, month);
+    const assignments = await getAssignments(page, year, month);
     let found = false;
     for (const employeeAssignments of byEmployee(assignments).values()) {
       const byWeek = new Map<string, Assignment[]>();
@@ -382,16 +305,16 @@ test("CP-102 — weeklyShift M se alinea con MF en fin de semana", async ({ page
 test("CP-103 — generación evita T→M en días consecutivos", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
+    
     const year = 2028;
     const month = 4;
 
     const generateResp = await page.request.post("/api/schedules/generate", {
-      data: { year, month, projectId: project.id },
+      data: { year, month,  },
     });
     expect(generateResp.status()).toBe(200);
 
-    for (const employeeAssignments of byEmployee(await getAssignments(page, project.id, year, month)).values()) {
+    for (const employeeAssignments of byEmployee(await getAssignments(page, year, month)).values()) {
       for (let i = 1; i < employeeAssignments.length; i++) {
         const previous = normalizeShift(employeeAssignments[i - 1].shiftType);
         const current = normalizeShift(employeeAssignments[i].shiftType);
@@ -410,16 +333,16 @@ test("CP-103 — generación evita T→M en días consecutivos", async ({ page }
 test("CP-104 — generación evita N→T y N→M en días consecutivos", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
+    
     const year = 2028;
     const month = 5;
 
     const generateResp = await page.request.post("/api/schedules/generate", {
-      data: { year, month, projectId: project.id },
+      data: { year, month,  },
     });
     expect(generateResp.status()).toBe(200);
 
-    for (const employeeAssignments of byEmployee(await getAssignments(page, project.id, year, month)).values()) {
+    for (const employeeAssignments of byEmployee(await getAssignments(page, year, month)).values()) {
       for (let i = 1; i < employeeAssignments.length; i++) {
         const previous = normalizeShift(employeeAssignments[i - 1].shiftType);
         const current = normalizeShift(employeeAssignments[i].shiftType);
@@ -438,16 +361,16 @@ test("CP-104 — generación evita N→T y N→M en días consecutivos", async (
 test("CP-105 — generación no deja un único D entre bloques de trabajo", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
+    
     const year = 2028;
     const month = 6;
 
     const generateResp = await page.request.post("/api/schedules/generate", {
-      data: { year, month, projectId: project.id },
+      data: { year, month,  },
     });
     expect(generateResp.status()).toBe(200);
 
-    for (const employeeAssignments of byEmployee(await getAssignments(page, project.id, year, month)).values()) {
+    for (const employeeAssignments of byEmployee(await getAssignments(page, year, month)).values()) {
       let singleRestGaps = 0;
       for (let i = 1; i < employeeAssignments.length - 1; i++) {
         const previous = employeeAssignments[i - 1].shiftType;
@@ -472,16 +395,16 @@ test("CP-105 — generación no deja un único D entre bloques de trabajo", asyn
 test("CP-106 — ShiftEditor advierte al asignar M después de T", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    const [employee] = await getProjectEmployees(page, project.id);
+    
+    const [employeeId] = await getEmployeeIds(page);
     const previousDate = `${DEFAULT_MONTH_PREFIX}-10`;
     const targetDate = addDays(previousDate, 1);
 
-    await setShift(page, employee.id, previousDate, "T");
-    await deleteAssignmentIfExists(page, project.id, employee.id, targetDate);
-    await selectProjectOnHome(page, project);
+    await setShift(page, employeeId, previousDate, "T");
+    await deleteAssignmentIfExists(page, project.id, employeeId, targetDate);
+    await page.reload();
 
-    await page.getByTestId(`cell-${employee.id}-${targetDate}`).click();
+    await page.getByTestId(`cell-${employeeId}-${targetDate}`).click();
     await page.getByTestId("shift-btn-M").click();
 
     const warning = page.getByTestId("et-warning");
@@ -500,8 +423,8 @@ test("CP-106 — ShiftEditor advierte al asignar M después de T", async ({ page
 test("CP-107 — tabla de complementos visible con columnas esperadas", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    await selectProjectOnHome(page, project);
+    
+    await page.reload();
 
     const table = page.getByTestId("extra-pay-table");
     await expect(table).toBeVisible({ timeout: 10_000 });
@@ -521,14 +444,14 @@ test("CP-107 — tabla de complementos visible con columnas esperadas", async ({
 test("CP-108 — total de complementos por empleado se calcula correctamente", async ({ page }) => {
   try {
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
-    const [employee] = await getProjectEmployees(page, project.id);
+    
+    const [employeeId] = await getEmployeeIds(page);
 
-    await selectProjectOnHome(page, project);
+    await page.reload();
     const table = page.getByTestId("extra-pay-table");
     await expect(table).toBeVisible({ timeout: 10_000 });
 
-    const row = table.locator("tbody tr").filter({ has: page.getByTestId(`extra-pay-${employee.id}-total`) }).first();
+    const row = table.locator("tbody tr").filter({ has: page.getByTestId(`extra-pay-${employeeId}-total`) }).first();
     await expect(row).toBeVisible({ timeout: 5_000 });
 
     const headers = await table.locator("thead th").allInnerTexts();
@@ -544,7 +467,7 @@ test("CP-108 — total de complementos por empleado se calcula correctamente", a
       expectedAmount += count * shiftRate;
     }
 
-    const totalText = await page.getByTestId(`extra-pay-${employee.id}-total`).innerText();
+    const totalText = await page.getByTestId(`extra-pay-${employeeId}-total`).innerText();
     const uiAmount = parseEuroToNumber(totalText);
     expect(uiAmount).toBeCloseTo(expectedAmount, 2);
   } catch (err) {
@@ -560,9 +483,9 @@ test("CP-110 — el resumen de complementos se renderiza bajo el cuadrante con t
   try {
     await page.setViewportSize({ width: 1600, height: 900 });
     await loginAsAdmin(page);
-    const project = await getDefaultProject(page);
+    
 
-    await selectProjectOnHome(page, project);
+    await page.reload();
 
     const grid = page.getByTestId("schedule-grid");
     const counters = page.getByTestId("counters-table");

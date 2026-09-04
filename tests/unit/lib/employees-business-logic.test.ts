@@ -10,9 +10,18 @@ import {
 } from "@/lib/employees/business-logic";
 
 describe("isValidRole", () => {
-  it("acepta SUPER_ADMIN y USER", () => {
-    expect(isValidRole("SUPER_ADMIN")).toBe(true);
-    expect(isValidRole("USER")).toBe(true);
+  it("acepta los roles vigentes ADMIN, TECNICO y VIEWER", () => {
+    expect(isValidRole("ADMIN")).toBe(true);
+    expect(isValidRole("TECNICO")).toBe(true);
+    expect(isValidRole("VIEWER")).toBe(true);
+  });
+
+  it("rechaza los roles eliminados en el Sprint 1", () => {
+    expect(isValidRole("SUPER_ADMIN")).toBe(false);
+    expect(isValidRole("USER")).toBe(false);
+    expect(isValidRole("PROJECT_ADMIN")).toBe(false);
+    expect(isValidRole("SUPER_VIEWER")).toBe(false);
+    expect(isValidRole("EMPLOYEE")).toBe(false);
   });
 
   it("rechaza roles desconocidos", () => {
@@ -53,7 +62,7 @@ describe("validateCreateEmployee", () => {
     name: "Nuevo Técnico",
     email: "nuevo@cuadrantes.local",
     password: "Segura1234!",
-    role: "USER",
+    role: "TECNICO",
   };
 
   it("valida un body correcto", () => {
@@ -101,9 +110,9 @@ describe("validateUpdateEmployee", () => {
   });
 
   it("valida actualización solo de rol", () => {
-    const result = validateUpdateEmployee({ role: "SUPER_ADMIN" });
+    const result = validateUpdateEmployee({ role: "ADMIN" });
     expect(result.valid).toBe(true);
-    expect(result.data?.role).toBe("SUPER_ADMIN");
+    expect(result.data?.role).toBe("ADMIN");
   });
 
   it("rechaza body vacío", () => {

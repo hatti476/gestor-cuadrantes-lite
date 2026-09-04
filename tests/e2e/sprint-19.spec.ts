@@ -2,32 +2,30 @@
  * tests/e2e/sprint-19.spec.ts
  * Sprint 19 — Gestión de usuarios y proyectos: RBAC, /admin section
  *
- * CP-129 — SUPER_ADMIN ve el enlace "Administración" en la cabecera
- * CP-130 — PROJECT_ADMIN no ve "Administración" en la cabecera
- * CP-131 — USER (empleado) solo ve "Cuadrante" y "Ayuda" en la cabecera
- * CP-132 — /admin redirige a "/" si el usuario no es SUPER_ADMIN
- * CP-133 — SUPER_ADMIN puede crear un usuario desde /admin (tab Usuarios)
- * CP-134 — SUPER_ADMIN puede editar email de un usuario desde /admin
- * CP-135 — SUPER_ADMIN puede desactivar un usuario desde /admin
+ * CP-129 — ADMIN ve el enlace "Administración" en la cabecera
+ * CP-130 — TECNICO no ve "Administración" en la cabecera
+ * CP-131 — TECNICO (empleado) solo ve "Cuadrante" y "Ayuda" en la cabecera
+ * CP-132 — /admin redirige a "/" si el usuario no es ADMIN
+ * CP-133 — ADMIN puede crear un usuario desde /admin (tab Usuarios)
+ * CP-134 — ADMIN puede editar email de un usuario desde /admin
+ * CP-135 — ADMIN puede desactivar un usuario desde /admin
  * CP-136 — El filtro por rol en la tab Usuarios filtra correctamente
- * CP-137 — PROJECT_ADMIN solo ve su propio proyecto en /projects
- * CP-138 — SUPER_VIEWER ve todos los proyectos en /projects (modo lectura)
- * CP-139 — SUPER_VIEWER puede ver el cuadrante pero no tiene PrepPanel
- * CP-140 — SUPER_VIEWER no puede editar celdas del cuadrante
- * CP-141 — /employees redirige a /admin (backward compatibility)
- * CP-142 — SUPER_ADMIN puede cambiar la contraseña desde la tabla de usuarios
+ * CP-137 — VIEWER puede ver el cuadrante pero no tiene PrepPanel
+ * CP-138 — VIEWER no puede editar celdas del cuadrante
+ * CP-139 — /employees redirige a /admin (backward compatibility)
+ * CP-140 — ADMIN puede cambiar la contraseña desde la tabla de usuarios
  */
 
 import { test, expect } from "@playwright/test";
 import { ROUTES } from "./config";
-import { loginAsAdmin, loginAsPM, loginAsViewer, loginAsTech } from "./helpers";
+import { loginAsAdmin, loginAsViewer, loginAsTech } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-129 — SUPER_ADMIN ve "Administración" en la cabecera
+// CP-129 — ADMIN ve "Administración" en la cabecera
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-129 — SUPER_ADMIN ve el enlace 'Administración' en la cabecera @smoke", async ({
+test("CP-129 — ADMIN ve el enlace 'Administración' en la cabecera @smoke", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -38,12 +36,12 @@ test("CP-129 — SUPER_ADMIN ve el enlace 'Administración' en la cabecera @smok
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-130 — PROJECT_ADMIN no ve "Administración" en la cabecera
+// CP-130 — TECNICO no ve "Administración" en la cabecera
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-130 — PROJECT_ADMIN no ve el enlace 'Administración' en la cabecera", async ({
+test("CP-130 — TECNICO no ve el enlace 'Administración' en la cabecera", async ({
   page,
 }) => {
-  await loginAsPM(page);
+  await loginAsTech(page);
   await page.goto(ROUTES.home);
   // Esperar que la cabecera cargue (role badge visible)
   await expect(page.locator('[data-testid="role-badge"]')).toBeVisible({
@@ -54,9 +52,9 @@ test("CP-130 — PROJECT_ADMIN no ve el enlace 'Administración' en la cabecera"
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-131 — USER (empleado puro) solo ve "Cuadrante" y "Ayuda"
+// CP-131 — TECNICO (empleado puro) solo ve "Cuadrante" y "Ayuda"
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-131 — USER solo ve 'Cuadrante' y 'Ayuda' en la cabecera", async ({
+test("CP-131 — TECNICO solo ve 'Cuadrante' y 'Ayuda' en la cabecera", async ({
   page,
 }) => {
   await loginAsTech(page);
@@ -73,21 +71,21 @@ test("CP-131 — USER solo ve 'Cuadrante' y 'Ayuda' en la cabecera", async ({
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-132 — /admin redirige a "/" si el usuario no es SUPER_ADMIN
+// CP-132 — /admin redirige a "/" si el usuario no es ADMIN
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-132 — /admin redirige a '/' para no-SUPER_ADMIN (PM) @smoke", async ({
+test("CP-132 — /admin redirige a '/' para no-ADMIN (PM) @smoke", async ({
   page,
 }) => {
-  await loginAsPM(page);
+  await loginAsTech(page);
   await page.goto("/admin");
   // Debe redirigir al home
   await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-133 — SUPER_ADMIN puede crear un usuario desde /admin (tab Usuarios)
+// CP-133 — ADMIN puede crear un usuario desde /admin (tab Usuarios)
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-133 — SUPER_ADMIN puede crear un SUPER_VIEWER desde /admin @smoke", async ({
+test("CP-133 — ADMIN puede crear un VIEWER desde /admin @smoke", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -102,9 +100,9 @@ test("CP-133 — SUPER_ADMIN puede crear un SUPER_VIEWER desde /admin @smoke", a
   // Esperar que el modal esté visible
   await expect(page.locator('h3:has-text("Nuevo usuario")')).toBeVisible({ timeout: 5_000 });
 
-  // Cambiar rol primero (elimina el campo Nombre requerido para USER)
+  // Cambiar rol primero (elimina el campo Nombre requerido para TECNICO)
   const roleSelect = page.locator('[data-testid="select-global-role"]');
-  await roleSelect.selectOption("SUPER_VIEWER");
+  await roleSelect.selectOption("VIEWER");
 
   // Rellenar formulario
   await page.locator('input[type="email"]').fill("newviewer_cp133@cuadrantes.test");
@@ -125,9 +123,9 @@ test("CP-133 — SUPER_ADMIN puede crear un SUPER_VIEWER desde /admin @smoke", a
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-134 — SUPER_ADMIN puede editar el email de un usuario desde /admin
+// CP-134 — ADMIN puede editar el email de un usuario desde /admin
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-134 — SUPER_ADMIN puede editar el email del usuario creado en CP-133", async ({
+test("CP-134 — ADMIN puede editar el email del usuario creado en CP-133", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -162,15 +160,15 @@ test("CP-134 — SUPER_ADMIN puede editar el email del usuario creado en CP-133"
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-135 — SUPER_ADMIN puede desactivar un usuario desde /admin
+// CP-135 — ADMIN puede desactivar un usuario desde /admin
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-135 — SUPER_ADMIN puede desactivar un usuario USER desde /admin @smoke", async ({
+test("CP-135 — ADMIN puede desactivar un usuario TECNICO desde /admin @smoke", async ({
   page,
 }) => {
   // Login primero para que el API request tenga sesión
   await loginAsAdmin(page);
 
-  // Crear un usuario USER para poder desactivarlo
+  // Crear un usuario TECNICO para poder desactivarlo
   const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const tempEmail = `cp135_temp_${uniqueSuffix}@cuadrantes.test`;
   const createRes = await page.request.post("/api/admin/users", {
@@ -178,7 +176,7 @@ test("CP-135 — SUPER_ADMIN puede desactivar un usuario USER desde /admin @smok
       name: "CP135 Temp",
       email: tempEmail,
       password: "Test1234!",
-      globalRole: "USER",
+      globalRole: "TECNICO",
     },
   });
 
@@ -216,7 +214,7 @@ test("CP-135 — SUPER_ADMIN puede desactivar un usuario USER desde /admin @smok
 // ──────────────────────────────────────────────────────────────────────────────
 // CP-136 — El filtro por rol en la tab Usuarios funciona correctamente
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-136 — Filtro por rol SUPER_ADMIN muestra solo SUPER_ADMINs @smoke", async ({
+test("CP-136 — Filtro por rol ADMIN muestra solo ADMINs @smoke", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -225,67 +223,27 @@ test("CP-136 — Filtro por rol SUPER_ADMIN muestra solo SUPER_ADMINs @smoke", a
     timeout: 8_000,
   });
 
-  // Seleccionar filtro SUPER_ADMIN
+  // Seleccionar filtro ADMIN
   const roleFilter = page.locator("select", { hasText: "Todos los roles" });
-  await roleFilter.selectOption("SUPER_ADMIN");
+  await roleFilter.selectOption("ADMIN");
 
-  // Todos los badges de rol deben ser SUPER_ADMIN
-  const badges = page.locator("span.rounded-full", { hasText: "SUPER_ADMIN" });
+  // Todos los badges de rol deben ser ADMIN
+  const badges = page.locator("span.rounded-full", { hasText: "ADMIN" });
   await expect(badges.first()).toBeVisible({ timeout: 5_000 });
 
-  // No debe haber badges de SUPER_VIEWER ni USER
+  // No debe haber badges de VIEWER ni TECNICO
   await expect(
-    page.locator("span.rounded-full", { hasText: "SUPER_VIEWER" })
+    page.locator("span.rounded-full", { hasText: "VIEWER" })
   ).not.toBeVisible();
   await expect(
-    page.locator("span.rounded-full", { hasText: /^USER$/ })
-  ).not.toBeVisible();
-});
-
-// ──────────────────────────────────────────────────────────────────────────────
-// CP-137 — PROJECT_ADMIN solo ve su propio proyecto en /projects
-// ──────────────────────────────────────────────────────────────────────────────
-test("CP-137 — PROJECT_ADMIN solo ve su propio proyecto en /projects", async ({
-  page,
-}) => {
-  await loginAsPM(page);
-  await page.goto(ROUTES.projects);
-
-  const table = page.locator('[data-testid="projects-table"]');
-  await expect(table).toBeVisible({ timeout: 8_000 });
-
-  // La API /api/projects filtra por membresía para PROJECT_ADMIN
-  // → solo debe aparecer 1 proyecto
-  const rows = table.locator('[data-testid="project-row"]');
-  const count = await rows.count();
-  expect(count).toBe(1);
-});
-
-// ──────────────────────────────────────────────────────────────────────────────
-// CP-138 — SUPER_VIEWER ve todos los proyectos en /projects (modo lectura)
-// ──────────────────────────────────────────────────────────────────────────────
-test("CP-138 — SUPER_VIEWER puede acceder a /projects y ve todos los proyectos", async ({
-  page,
-}) => {
-  await loginAsViewer(page);
-  await page.goto(ROUTES.projects);
-
-  // No debe redirigir — debe llegar a /projects
-  await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
-
-  const table = page.locator('[data-testid="projects-table"]');
-  await expect(table).toBeVisible({ timeout: 8_000 });
-
-  // No debe haber botón de "Nuevo proyecto"
-  await expect(
-    page.locator('[data-testid="btn-new-project"]')
+    page.locator("span.rounded-full", { hasText: /^TECNICO$/ })
   ).not.toBeVisible();
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-139 — SUPER_VIEWER puede ver el cuadrante sin PrepPanel
+// CP-139 — VIEWER puede ver el cuadrante sin PrepPanel
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-139 — SUPER_VIEWER ve el cuadrante pero no tiene PrepPanel", async ({
+test("CP-139 — VIEWER ve el cuadrante pero no tiene PrepPanel", async ({
   page,
 }) => {
   await loginAsViewer(page);
@@ -310,9 +268,9 @@ test("CP-139 — SUPER_VIEWER ve el cuadrante pero no tiene PrepPanel", async ({
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-140 — SUPER_VIEWER no puede editar celdas del cuadrante
+// CP-140 — VIEWER no puede editar celdas del cuadrante
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-140 — SUPER_VIEWER no puede editar celdas (no hay ShiftEditor al hacer clic) @smoke", async ({
+test("CP-140 — VIEWER no puede editar celdas (no hay ShiftEditor al hacer clic) @smoke", async ({
   page,
 }) => {
   await loginAsViewer(page);
@@ -331,7 +289,7 @@ test("CP-140 — SUPER_VIEWER no puede editar celdas (no hay ShiftEditor al hace
   const hasGrid = await grid.isVisible();
 
   if (isUnpublished) {
-    // Correct: SUPER_VIEWER sees unpublished message — no editor must be shown
+    // Correct: VIEWER sees unpublished message — no editor must be shown
     await expect(shiftEditor).not.toBeVisible();
     return;
   }
@@ -344,7 +302,7 @@ test("CP-140 — SUPER_VIEWER no puede editar celdas (no hay ShiftEditor al hace
       await editableCells.first().click();
       await expect(shiftEditor).not.toBeVisible({ timeout: 2_000 });
     } else {
-      // No cursor-pointer cells → SUPER_VIEWER correctly has no edit access
+      // No cursor-pointer cells → VIEWER correctly has no edit access
       expect(cellCount).toBe(0);
     }
     return;
@@ -358,7 +316,7 @@ test("CP-140 — SUPER_VIEWER no puede editar celdas (no hay ShiftEditor al hace
 // ──────────────────────────────────────────────────────────────────────────────
 // CP-141 — /employees redirige a /admin (backward compatibility)
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-141 — /employees redirige a /admin para SUPER_ADMIN", async ({
+test("CP-141 — /employees redirige a /admin para ADMIN", async ({
   page,
 }) => {
   await loginAsAdmin(page);
@@ -368,9 +326,9 @@ test("CP-141 — /employees redirige a /admin para SUPER_ADMIN", async ({
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CP-142 — SUPER_ADMIN puede cambiar contraseña desde la tabla
+// CP-142 — ADMIN puede cambiar contraseña desde la tabla
 // ──────────────────────────────────────────────────────────────────────────────
-test("CP-142 — SUPER_ADMIN cambia contraseña desde acción directa de tabla", async ({
+test("CP-142 — ADMIN cambia contraseña desde acción directa de tabla", async ({
   page,
 }) => {
   const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -385,7 +343,7 @@ test("CP-142 — SUPER_ADMIN cambia contraseña desde acción directa de tabla",
       name: "CP142 Temp",
       email: tempEmail,
       password: oldPassword,
-      globalRole: "USER",
+      globalRole: "TECNICO",
     },
   });
   expect(createRes.ok()).toBeTruthy();

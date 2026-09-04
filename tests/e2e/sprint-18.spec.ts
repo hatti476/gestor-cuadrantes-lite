@@ -1,12 +1,12 @@
 /**
  * tests/e2e/sprint-18.spec.ts
- * Sprint 18 — Fixes UX: continuidad cross-month, SUPER_VIEWER, colores unificados, snapshot undo
+ * Sprint 18 — Fixes UX: continuidad cross-month, VIEWER, colores unificados, snapshot undo
  *
  * CP-115 — mes que termina en sábado con MF → el domingo del mes siguiente mismo empleado MF
  * CP-116 — mes que termina en sábado con TF → el domingo del mes siguiente mismo empleado TF
  * CP-117 — regenerar mes no rompe el paquete de sábado del mes siguiente
- * CP-118 — SUPER_VIEWER puede ver el cuadrante pero no puede editar celdas
- * CP-119 — SUPER_VIEWER no ve PrepPanel ni botones de gestión
+ * CP-118 — VIEWER puede ver el cuadrante pero no puede editar celdas
+ * CP-119 — VIEWER no ve PrepPanel ni botones de gestión
  * CP-120 — los sábados y domingos tienen fondo diferenciado en el grid
  * CP-121 — M y MF tienen el mismo color naranja en el grid
  * CP-122 — T y TF tienen el mismo color azul en el grid
@@ -20,12 +20,10 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import { ROUTES } from "./config";
-import { generateScheduleAndWait, loginAsAdmin, loginAsViewer } from "./helpers";
+import { loginAsAdmin, generateScheduleAndWait, screenshotOnFail } from "./helpers";
 import { loginAs as loginAsRole } from "./helpers/auth-utils";
 
-test.describe.configure({ mode: "serial" });
 
-type Project = { id: string; name: string; region?: string | null };
 type Assignment = {
   id: string;
   employeeId: string;
@@ -34,52 +32,53 @@ type Assignment = {
   manual?: boolean;
 };
 
-async function getDefaultProject(page: Page): Promise<Project> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const resp = await page.request.get("/api/projects");
-      expect(resp.status()).toBe(200);
-      const projects: Project[] = await resp.json();
-      expect(projects.length).toBeGreaterThan(0);
-      return projects[0];
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) {
-        await page.waitForTimeout(500 * attempt);
-      }
-    }
-  }
-  throw lastError;
-}
-
-async function getAssignments(
-  page: Page,
-  projectId: string,
-  year: number,
-  month: number
-): Promise<Assignment[]> {
-  const resp = await page.request.get(
-    `/api/schedules?year=${year}&month=${month}&projectId=${projectId}`
+async function getAssignments(page: Page, year: number, month: number): Promise<Assignment[]> {
+  const response = await page.request.get(
+    `/api/schedules?year=${year}&month=${month}`
   );
-  expect(resp.status()).toBe(200);
-  const data: { assignments: Assignment[] } = await resp.json();
+  expect(response.status()).toBe(200);
+  const data: { assignments: Assignment[] } = await response.json();
   return data.assignments;
 }
 
-async function generateSchedule(page: Page, projectId: string, year: number, month: number) {
-  const resp = await page.request.post("/api/schedules/generate", {
-    data: { year, month, projectId },
-  });
-  expect(resp.status()).toBe(200);
-  return resp.json();
+async function deleteAssignmentIfExists(
+  page: Page,
+  employeeId: string,
+  date: string
+): Promise<void> {
+  const [year, month] = date.split("-").map(Number);
+  const assignments = await getAssignments(page, year, month);
+  const existing = assignments.find(
+    (a) => a.employeeId === employeeId && a.date.slice(0, 10) === date
+  );
+  if (existing) {
+    const deleteResp = await page.request.delete(`/api/schedules?id=${existing.id}`);
+    expect([200, 404]).toContain(deleteResp.status());
+  }
 }
 
-// December 2026: ends on Thursday (31-Dec). Need a month ending on Saturday.
-// October 2026: ends on Saturday (31 Oct is a Saturday). Perfect for cross-month tests.
-const CROSS_MONTH_YEAR = 2026;
-const CROSS_MONTH_SAT_MONTH = 10; // October — ends on Saturday (31 Oct)
-const CROSS_MONTH_SUN_MONTH = 11; // November — starts on Sunday (1 Nov)
+async function setShift(page: Page, employeeId: string, date: string, shiftType: string): Promise<void> {
+  const response = await page.request.post("/api/schedules", {
+    data: { employeeId, date, shiftType },
+  });
+  expect([200, 201]).toContain(response.status());
+}
+
+async function generateSchedule(page: Page, year: number, month: number): Promise<any> {
+  const response = await page.request.post("/api/schedules/generate", {
+    data: { year, month },
+  });
+  expect(response.status()).toBe(200);
+  return response.json();
+}
+
+async function getEmployeeIds(page: Page): Promise<string[]> {
+  const response = await page.request.get("/api/employees");
+  expect(response.status()).toBe(200);
+  const employees: { id: string }[] = await response.json();
+  expect(employees.length).toBeGreaterThan(0);
+  return employees.map((e) => e.id);
+}
 
 // ===========================================================================
 // CP-115 & CP-116 — Cross-month weekend continuity
@@ -89,11 +88,11 @@ test("CP-115 — mes que termina en sábado con MF → el domingo del mes siguie
   page,
 }) => {
   await loginAsRole(page, "super_admin");
-  const project = await getDefaultProject(page);
+  
 
   // Generate October 2026 (ends Saturday 31 Oct)
   await generateSchedule(page, project.id, CROSS_MONTH_SAT_MONTH === 10 ? CROSS_MONTH_YEAR : CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
-  const octAssignments = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
+  const octAssignments = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
 
   // Find who worked Saturday Oct 31
   const satAssignment = octAssignments.find(
@@ -109,7 +108,7 @@ test("CP-115 — mes que termina en sábado con MF → el domingo del mes siguie
 
   // Generate November 2026 (starts on Sunday 1 Nov)
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
-  const novAssignments = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
+  const novAssignments = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
 
   // The same employee should cover Nov 1 (Sunday) with same shift type
   const sunAssignment = novAssignments.find(
@@ -123,11 +122,11 @@ test("CP-116 — generación cross-month: el domingo inicial hereda el turno del
   page,
 }) => {
   await loginAsRole(page, "super_admin");
-  const project = await getDefaultProject(page);
+  
 
   // Generate October 2026
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
-  const octAssignments = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
+  const octAssignments = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
 
   // Find assignment on Saturday Oct 31 (any regular shift)
   const satAssignment = octAssignments.find((a) => a.date.slice(0, 10) === "2026-10-31");
@@ -138,7 +137,7 @@ test("CP-116 — generación cross-month: el domingo inicial hereda el turno del
 
   // Generate November (starts Sunday)
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
-  const novAssignments = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
+  const novAssignments = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
 
   // The Nov 1 assignment (if it's a Sunday) should follow weekend pack logic
   const nov1 = novAssignments.filter((a) => a.date.slice(0, 10) === "2026-11-01");
@@ -150,13 +149,13 @@ test("CP-117 — regenerar el mes anterior no rompe el paquete sábado del mes s
   page,
 }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   // Generate both months
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SAT_MONTH);
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
 
-  const novBefore = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
+  const novBefore = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
   const nov1Before = novBefore.filter((a) => a.date.slice(0, 10) === "2026-11-01");
 
   // Regenerate October again (should re-seed prevMonthTail consistently)
@@ -164,7 +163,7 @@ test("CP-117 — regenerar el mes anterior no rompe el paquete sábado del mes s
 
   // Regenerate November again using Oct as prevMonthTail
   await generateSchedule(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
-  const novAfter = await getAssignments(page, project.id, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
+  const novAfter = await getAssignments(page, CROSS_MONTH_YEAR, CROSS_MONTH_SUN_MONTH);
   const nov1After = novAfter.filter((a) => a.date.slice(0, 10) === "2026-11-01");
 
   // Employee count should be stable
@@ -172,10 +171,10 @@ test("CP-117 — regenerar el mes anterior no rompe el paquete sábado del mes s
 });
 
 // ===========================================================================
-// CP-118 & CP-119 — SUPER_VIEWER role restrictions
+// CP-118 & CP-119 — VIEWER role restrictions
 // ===========================================================================
 
-test("CP-118 — SUPER_VIEWER puede ver el cuadrante pero no editar celdas @smoke", async ({ page }) => {
+test("CP-118 — VIEWER puede ver el cuadrante pero no editar celdas @smoke", async ({ page }) => {
   await loginAsViewer(page);
 
   // Should be on home/schedule page
@@ -184,7 +183,7 @@ test("CP-118 — SUPER_VIEWER puede ver el cuadrante pero no editar celdas @smok
   // Badge should show "Viewer"
   const badge = page.getByTestId("role-badge");
   await expect(badge).toBeVisible();
-  await expect(badge).toContainText(/Viewer|SUPER_VIEWER/);
+  await expect(badge).toContainText(/Viewer|VIEWER/);
 
   // Grid should be visible
   await page.waitForSelector("[data-testid='schedule-grid']", { timeout: 15_000 }).catch(() => {
@@ -197,7 +196,7 @@ test("CP-118 — SUPER_VIEWER puede ver el cuadrante pero no editar celdas @smok
   });
 });
 
-test("CP-119 — SUPER_VIEWER no ve PrepPanel ni botones de acción de gestión", async ({ page }) => {
+test("CP-119 — VIEWER no ve PrepPanel ni botones de acción de gestión", async ({ page }) => {
   await loginAsViewer(page);
 
   // PrepPanel (the collapsible options panel) should not be visible
@@ -248,7 +247,7 @@ test("CP-121 — M y MF tienen el mismo color naranja (#F97316) en shift-colors"
 }) => {
   await loginAsAdmin(page);
   // Verify via API - the color constant is used in rendering
-  await page.request.get("/api/schedules?year=2026&month=1&projectId=any");
+  await page.request.get("/api/schedules?year=2026&month=1");
   // Colors are compile-time constants; verify via page evaluation
   await page.goto(ROUTES.home);
   const colorM = await page.evaluate(() => {
@@ -310,10 +309,10 @@ test("CP-125 — restaurar snapshot devuelve al estado anterior a la generación
   page,
 }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   // Get initial state
-  const initialAssignments = await getAssignments(page, project.id, 2026, 7);
+  const initialAssignments = await getAssignments(page, 2026, 7);
   const initialCount = initialAssignments.length;
 
   // Save snapshot (simulate what the UI does before generating)
@@ -326,7 +325,7 @@ test("CP-125 — restaurar snapshot devuelve al estado anterior a la generación
   }));
 
   const saveResp = await page.request.post("/api/schedules/snapshot", {
-    data: { projectId: project.id, month, year, snapshot: snapshotData },
+    data: { month, year, snapshot: snapshotData },
   });
   expect(saveResp.status()).toBe(200);
 
@@ -335,14 +334,14 @@ test("CP-125 — restaurar snapshot devuelve al estado anterior a la generación
 
   // Restore from snapshot
   const restoreResp = await page.request.post("/api/schedules/snapshot/restore", {
-    data: { projectId: project.id, month, year },
+    data: { month, year },
   });
   expect(restoreResp.status()).toBe(200);
   const restoreBody: { restored: number } = await restoreResp.json();
   expect(restoreBody.restored).toBe(initialCount);
 
   // Verify assignments match snapshot
-  const restoredAssignments = await getAssignments(page, project.id, year, month);
+  const restoredAssignments = await getAssignments(page, year, month);
   expect(restoredAssignments.length).toBe(initialCount);
 });
 
@@ -354,10 +353,10 @@ test("CP-126 — V (vacaciones) y B (baja) se muestran con fondo negro (#111827)
   page,
 }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   // Manually assign a V shift to ensure one exists
-  const employees = await page.request.get(`/api/employees?projectId=${project.id}`);
+  const employees = await page.request.get(`/api/employees`);
   if (!employees.ok()) { test.skip(); return; }
   const empList: { id: string }[] = await employees.json();
   if (empList.length === 0) { test.skip(); return; }
@@ -367,7 +366,7 @@ test("CP-126 — V (vacaciones) y B (baja) se muestran con fondo negro (#111827)
 
   // Create a V assignment
   const assignResp = await page.request.post("/api/schedules", {
-    data: { employeeId: empId, date: testDate, shiftType: "V", projectId: project.id },
+    data: { employeeId: empId, date: testDate, shiftType: "V",  },
   });
   if (!assignResp.ok()) { test.skip(); return; }
 
@@ -398,11 +397,11 @@ test("CP-127 — fines de semana distribuidos: ningún empleado tiene más de 3�
   page,
 }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   // Generate October 2026 (has 5 weekends)
   await generateSchedule(page, project.id, 2026, 10);
-  const assignments = await getAssignments(page, project.id, 2026, 10);
+  const assignments = await getAssignments(page, 2026, 10);
 
   // Count MF+TF per employee
   const weekendCount = new Map<string, number>();
@@ -439,17 +438,17 @@ test("CP-128 — botón undo muestra texto 'Deshacer' y el endpoint /snapshot/re
   page,
 }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   // Save a snapshot manually
   const snapResp = await page.request.post("/api/schedules/snapshot", {
-    data: { projectId: project.id, month: 9, year: 2026 },
+    data: { month: 9, year: 2026 },
   });
   expect(snapResp.status()).toBe(200);
 
   // Restore it
   const restoreResp = await page.request.post("/api/schedules/snapshot/restore", {
-    data: { projectId: project.id, month: 9, year: 2026 },
+    data: { month: 9, year: 2026 },
   });
   expect(restoreResp.status()).toBe(200);
 

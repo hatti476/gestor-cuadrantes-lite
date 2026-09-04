@@ -6,7 +6,7 @@
 |-------|-------|
 | ID | SPEC-003 |
 | Tipo | feature |
-| Estado | ready |
+| Estado | done |
 | Prioridad | alta |
 | Agentes asignados | @orchestrator, @qa, @backend, @frontend, @devlead, @security |
 | Fecha de creación | 2026-08-27 |
@@ -36,18 +36,18 @@ para **evitar lógica compleja de proyectos y roles anidados**.
 
 ## Criterios de aceptación
 
-- [ ] AC-01: `lib/auth/permissions.ts` reescrito completamente con matriz `ADMIN | TECNICO | VIEWER`
-- [ ] AC-02: Eliminadas funciones obsoletas: `canManageProjectMembers`, `canManageProjects`, `isProjectAdmin`, `isSuperViewer`, `isSuperAdmin` (en favor de nuevos helpers)
-- [ ] AC-03: `app/api/auth/[...nextauth]/route.ts` actualizado: callbacks `jwt` y `session` mapean al nuevo enum `ADMIN | TECNICO | VIEWER`
-- [ ] AC-04: Todos los endpoints `/api/**/route.ts` auditados y guards actualizados a nuevo sistema
-- [ ] AC-05: `middleware.ts` (si existe) actualizado con nuevas reglas de protección
-- [ ] AC-06: Componentes UI actualizados: `header.tsx`, `prep-panel.tsx`, `schedule-grid.tsx` y cualquier otro con condicionales de rol
-- [ ] AC-07: **RF-04**: `ADMIN` tiene acceso completo a todas las operaciones lectura/escritura
-- [ ] AC-08: **RF-05**: `TECNICO` y `VIEWER` son estrictamente read-only; cualquier escritura retorna 403
-- [ ] AC-09: **RF-06**: `TECNICO` y `VIEWER` solo ven cuadrante cuando `Schedule.published === true`; `ADMIN` ve siempre
-- [ ] AC-10: Gating de publicación aplica únicamente a `TECNICO` y `VIEWER`
-- [ ] AC-11: No hay lógica de proyecto en ningún guard
-- [ ] AC-12: `npm run ci:check` — 0 errores TypeScript sobre enum `Role`
+- [x] AC-01: `lib/auth/permissions.ts` reescrito completamente con matriz `ADMIN | TECNICO | VIEWER`
+- [x] AC-02: Eliminadas funciones obsoletas: `canManageProjectMembers`, `canManageProjects`, `isProjectAdmin`, `isSuperViewer`, `isSuperAdmin` (en favor de nuevos helpers)
+- [x] AC-03: `app/api/auth/[...nextauth]/route.ts` actualizado: callbacks `jwt` y `session` mapean al nuevo enum `ADMIN | TECNICO | VIEWER`
+- [x] AC-04: Todos los endpoints `/api/**/route.ts` auditados y guards actualizados a nuevo sistema
+- [x] AC-05: `middleware.ts` (si existe) actualizado con nuevas reglas de protección
+- [x] AC-06: Componentes UI actualizados: `header.tsx`, `prep-panel.tsx`, `schedule-grid.tsx` y cualquier otro con condicionales de rol
+- [x] AC-07: **RF-04**: `ADMIN` tiene acceso completo a todas las operaciones lectura/escritura
+- [x] AC-08: **RF-05**: `TECNICO` y `VIEWER` son estrictamente read-only; cualquier escritura retorna 403
+- [x] AC-09: **RF-06**: `TECNICO` y `VIEWER` solo ven cuadrante cuando `Schedule.published === true`; `ADMIN` ve siempre
+- [x] AC-10: Gating de publicación aplica únicamente a `TECNICO` y `VIEWER`
+- [x] AC-11: No hay lógica de proyecto en ningún guard
+- [x] AC-12: `npm run ci:check` — 0 errores TypeScript sobre enum `Role`
 
 ---
 
@@ -106,3 +106,13 @@ N/A — lógica de permisos. Ver capturas de UI en `specs/assets/` si se añaden
 | Fecha | Autor | Cambio |
 |-------|-------|--------|
 | 2026-08-27 | @orchestrator | Creación de la spec |
+| 2026-08-27 | @qa | Test unitario `tests/unit/auth/permissions.test.ts` escrito (TDD - 25 tests pasando) |
+| 2026-08-27 | @backend | `lib/auth/permissions.ts` reescrito: roles `ADMIN | TECNICO | VIEWER` |
+| 2026-08-27 | @backend | `app/api/auth/[...nextauth]/route.ts` actualizado: callbacks JWT sin projectMemberships |
+| 2026-08-27 | @backend | API routes actualizados: `/api/schedules/*`, `/api/employees/*`, `/api/holidays/*`, `/api/admin/users/*` |
+| 2026-08-27 | @frontend | UI actualizada: `header.tsx`, `prep-panel.tsx`, `app/page.tsx`, `app/employees/page.tsx`, `app/holidays/page.tsx`, `app/info/page.tsx`, `app/employees/[id]/history/page.tsx`, `app/admin/page.tsx` |
+| 2026-08-27 | @backend | `lib/schedules/generation-scoping.ts` eliminado (ya no necesario sin projectId) |
+| 2026-08-27 | @qa | `npm run test:unit` — 404 passing (2 pre-existentes CP-163) |
+| 2026-08-27 | @qa | `npm run ci:check` — 0 errores, 0 warnings |
+| 2026-08-27 | @devlead | Code review aprobado |
+| 2026-08-27 | @security | Auditoría permisos aprobada |

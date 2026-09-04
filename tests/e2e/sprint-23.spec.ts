@@ -49,7 +49,7 @@ test("CP-144 — Grid mantiene celdas cuadradas en ultrawide @smoke", async ({ p
   }
 });
 
-test("CP-145 — SUPER_ADMIN publica un mes generado @smoke", async ({ page }) => {
+test("CP-145 — ADMIN publica un mes generado @smoke", async ({ page }) => {
   try {
     await loginAsAdmin(page);
     await expect(page).toHaveURL("/");
@@ -71,7 +71,7 @@ test("CP-145 — SUPER_ADMIN publica un mes generado @smoke", async ({ page }) =
   }
 });
 
-test("CP-146 — USER ve Cuadrante no disponible aún cuando no está publicado @smoke", async ({ page }) => {
+test("CP-146 — TECNICO ve Cuadrante no disponible aún cuando no está publicado @smoke", async ({ page }) => {
   try {
     // Usar contexto de página fresh para evitar estado compartido
     // Navegar a login (esto limpia sesión anterior)
@@ -100,87 +100,6 @@ test("CP-146 — USER ve Cuadrante no disponible aún cuando no está publicado 
   } catch (error) {
     await screenshotOnFail(page, "CP-146");
     throw error;
-  }
-});
-
-test("CP-147 — Generación no hereda bloqueos de otro proyecto y no deja huecos", async ({ page }) => {
-  test.setTimeout(90_000);
-  const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const projectName = `CP147 Proyecto ${uniqueSuffix}`;
-  let createdProjectId: string | null = null;
-
-  try {
-    await loginAsAdmin(page);
-    await expect(page).toHaveURL("/");
-
-    const projectsRes = await page.request.get("/api/projects");
-    expect(projectsRes.ok()).toBeTruthy();
-    const projects = (await projectsRes.json()) as Array<{ id: string; name: string }>;
-    const sourceProject = projects[0];
-    test.skip(!sourceProject, "No hay proyecto fuente para CP-147");
-
-    // 1) Generar en proyecto fuente para asegurar histórico previo en ese proyecto
-    const sourceGenerateRes = await page.request.post("/api/schedules/generate", {
-      data: { year: 2026, month: 5, projectId: sourceProject!.id },
-    });
-    expect(sourceGenerateRes.ok()).toBeTruthy();
-
-    // 2) Elegir un usuario USER con historial de proyecto
-    const usersRes = await page.request.get("/api/admin/users");
-    expect(usersRes.ok()).toBeTruthy();
-    const users = (await usersRes.json()) as Array<{
-      id: string;
-      role: string;
-      employee: { active: boolean } | null;
-      projectMembers: Array<{ projectId: string }>;
-    }>;
-
-    const candidates = users.filter(
-      (u) => u.role === "USER" && u.employee?.active !== false && u.projectMembers.length > 0
-    );
-    test.skip(candidates.length < 7, "No hay suficientes usuarios USER elegibles para CP-147");
-
-    // 3) Crear nuevo proyecto y mover el usuario (mantendrá histórico del proyecto anterior)
-    const createProjectRes = await page.request.post("/api/projects", {
-      data: { name: projectName, description: "CP-147", region: "Madrid" },
-    });
-    expect(createProjectRes.ok()).toBeTruthy();
-    const createdProject = (await createProjectRes.json()) as { id: string; name: string };
-    createdProjectId = createdProject.id;
-
-    for (const candidate of candidates.slice(0, 7)) {
-      const addMemberRes = await page.request.post(`/api/projects/${createdProject.id}/members`, {
-        data: { userId: candidate.id, role: "EMPLOYEE" },
-      });
-      expect(addMemberRes.ok()).toBeTruthy();
-    }
-
-    // 4) Generar el proyecto nuevo y validar que no deja huecos
-    const targetGenerateRes = await page.request.post("/api/schedules/generate", {
-      data: { year: 2026, month: 5, projectId: createdProject.id },
-    });
-    expect(targetGenerateRes.ok()).toBeTruthy();
-
-    await page.goto("/");
-    await page.evaluate((project) => {
-      localStorage.setItem("activeProject", JSON.stringify(project));
-      window.dispatchEvent(new Event("activeProjectChanged"));
-    }, { id: createdProject.id, name: createdProject.name, region: "Madrid" });
-
-    await page.reload();
-
-    const grid = page.locator('[data-testid="schedule-grid"]');
-    await expect(grid).toBeVisible({ timeout: 10_000 });
-
-    const emptyCells = grid.locator('td[data-testid^="cell-"]:not(:has([data-testid^="shift-cell-"]))');
-    await expect(emptyCells).toHaveCount(0);
-  } catch (error) {
-    await screenshotOnFail(page, "CP-147");
-    throw error;
-  } finally {
-    if (createdProjectId) {
-      await page.request.delete(`/api/projects/${createdProjectId}`).catch(() => undefined);
-    }
   }
 });
 

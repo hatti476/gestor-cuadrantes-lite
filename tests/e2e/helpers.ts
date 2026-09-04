@@ -1,6 +1,6 @@
 /**
  * Helpers compartidos para todos los tests E2E.
- * Importar desde aquí — no duplicar en cada spec.
+ * Importar desde aqui - no duplicar en cada spec.
  */
 
 import { expect, Page } from "@playwright/test";
@@ -9,7 +9,7 @@ import fs from "fs";
 import { USERS, ROUTES } from "./config";
 
 /**
- * Realiza el login con las credenciales indicadas y espera la redirección a /.
+ * Realiza el login con las credenciales indicadas y espera la redireccion a /.
  */
 export async function login(
   page: Page,
@@ -17,28 +17,43 @@ export async function login(
   password: string
 ): Promise<void> {
   await page.goto(ROUTES.login);
+
+  // CRITICO: en modo dev React tarda ~2s en hidratar. Si hacemos click antes,
+  // el navegador ejecuta el submit NATIVO del boton (GET /login?callbackUrl=/)
+  // en lugar del onSubmit de React, y el login nunca ocurre.
+  await page.waitForFunction(
+    () => {
+      const form = document.querySelector("form");
+      if (!form) return false;
+      const key = Object.keys(form).find((k) => k.startsWith("__reactProps"));
+      if (!key) return false;
+      return typeof (form as never as Record<string, { onSubmit?: unknown }>)[key].onSubmit === "function";
+    },
+    undefined,
+    { timeout: 30_000 }
+  );
+
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForURL((url) => url.pathname !== ROUTES.login, { timeout: 20_000 });
+
+  await page.waitForURL((url) => url.pathname === "/", {
+    timeout: 30_000,
+    waitUntil: "commit",
+  });
 }
 
-/** Login rápido como SUPER_ADMIN. */
+/** Login rapido como ADMIN. */
 export async function loginAsAdmin(page: Page): Promise<void> {
   return login(page, USERS.admin.email, USERS.admin.password);
 }
 
-/** Login rápido como técnico (USER). */
+/** Login rapido como tecnico (TECNICO). */
 export async function loginAsTech(page: Page): Promise<void> {
   return login(page, USERS.tech.email, USERS.tech.password);
 }
 
-/** Login rápido como project manager (PM). */
-export async function loginAsPM(page: Page): Promise<void> {
-  return login(page, USERS.pm.email, USERS.pm.password);
-}
-
-/** Login rápido como SUPER_VIEWER. */
+/** Login rapido como VIEWER. */
 export async function loginAsViewer(page: Page): Promise<void> {
   return login(page, USERS.viewer.email, USERS.viewer.password);
 }
@@ -56,11 +71,11 @@ export async function screenshotOnFail(page: Page, cpId: string): Promise<void> 
       fullPage: true,
     });
   } catch {
-    // La página puede estar cerrada; ignoramos el error del screenshot.
+    // La pagina puede estar cerrada; ignoramos el error del screenshot.
   }
 }
 
-/** Open the PrepPanel generation step when the generate button is hidden. */
+/** Abre el paso de generacion cuando el boton esta oculto. */
 export async function openGenerateStep(page: Page): Promise<void> {
   const generateButton = page.locator('[data-testid="btn-generate"]');
   if (await generateButton.isVisible({ timeout: 500 }).catch(() => false)) return;
@@ -72,7 +87,7 @@ export async function openGenerateStep(page: Page): Promise<void> {
   await expect(generateButton).toBeVisible({ timeout: 5_000 });
 }
 
-/** Generate the current month, confirming regeneration when needed. */
+/** Genera el mes actual, confirmando regeneracion cuando sea necesario. */
 export async function generateScheduleAndWait(page: Page): Promise<void> {
   await openGenerateStep(page);
 
@@ -98,8 +113,8 @@ export async function generateScheduleAndWait(page: Page): Promise<void> {
 }
 
 /**
- * Open ShiftEditor by clicking an actually editable schedule cell.
- * Retries across multiple cells to avoid flaky clicks on locked/non-interactive cells.
+ * Abre ShiftEditor haciendo clic en una celda editable del cuadrante.
+ * Reintenta en varias celdas para evitar clicks flaky en celdas bloqueadas/no interactivas.
  */
 export async function openShiftEditorFromEditableCell(page: Page): Promise<void> {
   const editor = page.locator('[data-testid="shift-editor"]');

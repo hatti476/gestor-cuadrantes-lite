@@ -14,10 +14,6 @@ export const USERS = {
     email: process.env.TECH_EMAIL ?? "",
     password: process.env.TECH_PASSWORD ?? "",
   },
-  pm: {
-    email: process.env.PM_EMAIL ?? "",
-    password: process.env.PM_PASSWORD ?? "",
-  },
   viewer: {
     email: process.env.VIEWER_EMAIL ?? "",
     password: process.env.VIEWER_PASSWORD ?? "",
@@ -43,7 +39,6 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   employees: "/employees",
-  projects: "/projects",
   info: "/info",
   holidays: "/holidays",
 } as const;

@@ -242,6 +242,15 @@ export default function HomePage() {
     assignmentId?: string;
   } | null>(null);
 
+  // Estado para toggle preparación: guarda el turno previo antes de entrar en modo prep
+  // key: "employeeId|YYYY-MM-DD" → value: shiftType anterior (o undefined si estaba vacía)
+  const [prevShiftBeforePrep, setPrevShiftBeforePrep] = useState<Map<string, string | undefined>>(new Map());
+
+  // Limpiar prevShiftBeforePrep al cambiar de mes o salir de modo prep
+  useEffect(() => {
+    setPrevShiftBeforePrep(new Map());
+  }, [year, month, prepStep]);
+
   // ---------------------------------------------------------------------------
   // Carga datos del mes
   // ---------------------------------------------------------------------------
@@ -327,16 +336,35 @@ export default function HomePage() {
     // Modo preparación: asigna directamente V o D sin abrir el modal
     if (prepStep === "vacaciones" || prepStep === "libres") {
       const shiftType = prepStep === "vacaciones" ? "V" : "D";
-      // Toggle: si ya tiene ese tipo, limpiarlo
+      const cellKey = `${employeeId}|${date}`;
+
       const found = assignments.find(
         (a) => a.employeeId === employeeId && a.date.slice(0, 10) === date
       );
-      if (found?.shiftType === shiftType) {
-        // Quitar la asignación
-        if (found.id) {
-          await fetch(`/api/schedules?id=${found.id}`, { method: "DELETE" });
-        }
+      const currentCellShift = found?.shiftType;
+
+      if (currentCellShift === shiftType) {
+        // Click 2+: la celda ya tiene el turno de prep → restaurar estado anterior
+        const prevShift = prevShiftBeforePrep.get(cellKey);
+        const restoreShift = prevShift ?? "D"; // default D si estaba vacía
+        await fetch("/api/schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employeeId, date, shiftType: restoreShift }),
+        });
+        // Limpiar el estado guardado para este cell
+        setPrevShiftBeforePrep((prev) => {
+          const next = new Map(prev);
+          next.delete(cellKey);
+          return next;
+        });
       } else {
+        // Click 1: la celda NO tiene el turno de prep → guardar estado actual y poner prep shift
+        setPrevShiftBeforePrep((prev) => {
+          const next = new Map(prev);
+          next.set(cellKey, currentCellShift);
+          return next;
+        });
         await fetch("/api/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

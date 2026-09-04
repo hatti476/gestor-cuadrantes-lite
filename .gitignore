@@ -13,6 +13,13 @@
 # testing
 /coverage
 
+# artefactos de Playwright (reportes, trazas, capturas de fallos)
+/tests/report/
+/tests/report-docker/
+/tests/screenshots/
+/playwright-report/
+/test-results/
+
 # next.js
 /.next/
 /.next-test/

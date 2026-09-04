@@ -6,7 +6,7 @@
 |-------|-------|
 | ID | SPEC-004 |
 | Tipo | feature |
-| Estado | ready |
+| Estado | done |
 | Prioridad | media |
 | Agentes asignados | @orchestrator, @qa, @backend, @frontend, @devlead |
 | Fecha de creación | 2026-08-27 |
@@ -36,21 +36,21 @@ para **acceder directamente al cuadrante único del sistema**.
 
 ## Criterios de aceptación
 
-- [ ] AC-01: Directorio `app/projects/` eliminado completamente
-- [ ] AC-02: Directorio `app/api/projects/` eliminado completamente
-- [ ] AC-03: Componente `components/projects/project-selector.tsx` eliminado
-- [ ] AC-04: `components/layout/header.tsx` — eliminado `ProjectSelector` y referencias a proyecto activo
-- [ ] AC-05: `app/admin/page.tsx` — eliminada pestaña "Proyectos"; mantener solo gestión de usuarios
-- [ ] AC-06: `app/page.tsx` — eliminada lógica de `projectId` activo en `localStorage`; limpiados parámetros `projectId` en llamadas a `/api/schedules` y `/api/employees`
-- [ ] AC-07: Eliminados hooks/utils que lean `localStorage` para proyecto activo
-- [ ] AC-08: **RF-02**: Sin concepto de proyecto en ninguna capa visible
-- [ ] AC-09: Motor de generación (`lib/schedules/monthly-schedule-engine.ts`) **no se toca** en este sprint
-- [ ] AC-10: Endpoints `/api/schedules` y `/api/employees` funcionan sin `projectId`
-- [ ] AC-11: Navegar a `/projects` retorna 404
-- [ ] AC-12: Header no muestra selector de proyecto
-- [ ] AC-13: `/admin` muestra únicamente pestaña de usuarios
-- [ ] AC-14: Cuadrante principal carga empleados y turnos correctamente sin `projectId`
-- [ ] AC-15: `npm run ci:check` — 0 imports rotos referenciando rutas/modelos eliminados
+- [x] AC-01: Directorio `app/projects/` eliminado completamente
+- [x] AC-02: Directorio `app/api/projects/` eliminado completamente
+- [x] AC-03: Componente `components/projects/project-selector.tsx` eliminado
+- [x] AC-04: `components/layout/header.tsx` — eliminado `ProjectSelector` y referencias a proyecto activo
+- [x] AC-05: `app/admin/page.tsx` — eliminada pestaña "Proyectos"; mantener solo gestión de usuarios
+- [x] AC-06: `app/page.tsx` — eliminada lógica de `projectId` activo en `localStorage`; limpiados parámetros `projectId` en llamadas a `/api/schedules` y `/api/employees`
+- [x] AC-07: Eliminados hooks/utils que lean `localStorage` para proyecto activo
+- [x] AC-08: **RF-02**: Sin concepto de proyecto en ninguna capa visible
+- [x] AC-09: Motor de generación (`lib/schedules/monthly-schedule-engine.ts`) **no se toca** en este sprint
+- [x] AC-10: Endpoints `/api/schedules` y `/api/employees` funcionan sin `projectId`
+- [x] AC-11: Navegar a `/projects` retorna 404
+- [x] AC-12: Header no muestra selector de proyecto
+- [x] AC-13: `/admin` muestra únicamente pestaña de usuarios
+- [x] AC-14: Cuadrante principal carga empleados y turnos correctamente sin `projectId`
+- [x] AC-15: `npm run ci:check` — 0 imports rotos referenciando rutas/modelos eliminados
 
 ---
 
@@ -103,3 +103,7 @@ para **acceder directamente al cuadrante único del sistema**.
 | Fecha | Autor | Cambio |
 |-------|-------|--------|
 | 2026-08-27 | @orchestrator | Creación de la spec |
+| 2026-08-27 | @backend | `app/projects/` y `app/api/projects/` eliminados (commit f46b1bb) |
+| 2026-08-27 | @frontend | `components/projects/project-selector.tsx` eliminado; `header.tsx` limpio; `app/admin/page.tsx` sin pestaña proyectos |
+| 2026-08-27 | @frontend | `app/page.tsx` — eliminada lógica `activeProjectId` y `localStorage`; llamadas API sin `projectId` |
+| 2026-08-27 | @qa | `npm run ci:check` — 0 errores |

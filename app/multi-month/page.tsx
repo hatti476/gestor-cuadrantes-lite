@@ -52,7 +52,7 @@ export default function MultiMonthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const projectId = searchParams.get("projectId") ?? "";
+  // Sin projectId: el sistema ahora es single-tenant global
   const yearParam  = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()), 10);
   const monthParam = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1), 10);
 
@@ -63,13 +63,13 @@ export default function MultiMonthPage() {
   const [error, setError] = useState<string | null>(null);
   const [span, setSpan] = useState(3);
 
-  // Auth guard
+  // Auth guard: cualquier rol autenticado puede ver (read-only)
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
 
   const load = useCallback(async () => {
-    if (!projectId || status !== "authenticated") return;
+    if (status !== "authenticated") return;
     setLoading(true);
     setError(null);
     try {
@@ -83,9 +83,9 @@ export default function MultiMonthPage() {
       const years = [...new Set(periods.map((p) => p.year))];
 
       const [empRes, ...restRes] = await Promise.all([
-        fetch(`/api/employees?projectId=${projectId}`),
+        fetch(`/api/employees`),
         ...periods.map((p) =>
-          fetch(`/api/schedules?year=${p.year}&month=${p.month}&projectId=${projectId}`)
+          fetch(`/api/schedules?year=${p.year}&month=${p.month}`)
         ),
         ...years.map((y) => fetch(`/api/holidays?year=${y}`)),
       ]);
@@ -125,7 +125,7 @@ export default function MultiMonthPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, yearParam, monthParam, span, status]);
+  }, [yearParam, monthParam, span, status]);
 
   // Load on mount and when load function changes
   useEffect(() => {
@@ -331,7 +331,7 @@ export default function MultiMonthPage() {
                       colSpan={columns.length + 1}
                       className="text-center py-10 text-gray-400 text-sm"
                     >
-                      Sin empleados en este proyecto.
+                      Sin empleados en el sistema.
                     </td>
                   </tr>
                 )}

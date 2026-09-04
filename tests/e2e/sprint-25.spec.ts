@@ -1,15 +1,13 @@
 /**
  * Sprint 25 E2E regression tests.
- * Covers: BUG-53 (viewer 403 en multi-month), BUG-54 (stale closure proyecto activo),
- *         Feature: fila resaltada usuario, Feature: festivos en vista ampliada,
- *         BUG-55 (PROJECT_ADMIN no ve PrepPanel).
+ * BUG-54: Proyecto activo no se pierde al navegar a inicio
+ * Feature: fila resaltada usuario, Feature: festivos en vista ampliada
  */
 
 import { test, expect } from "@playwright/test";
 import {
   loginAsAdmin,
   loginAsTech,
-  loginAsPM,
   generateScheduleAndWait,
   screenshotOnFail,
 } from "./helpers";
@@ -75,70 +73,6 @@ test("CP-158 — Usuario con rol EMPLOYEE puede abrir la vista ampliada sin erro
   }
 });
 
-// ── BUG-54: Proyecto activo no se pierde al navegar a inicio ───────────────────
-// El test crea su propio proyecto de prueba para ser autónomo, sin depender de
-// proyectos creados por otros tests que podrían ser eliminados en ejecución paralela.
-
-test("CP-159 — Selección de proyecto se mantiene al navegar al inicio @smoke", async ({
-  page,
-}) => {
-  const testProjectName = `BUG54-CP159-${Date.now()}`;
-  let createdProjectId: string | null = null;
-
-  try {
-    await loginAsAdmin(page);
-    await expect(page).toHaveURL("/");
-
-    // Crear un proyecto de prueba propio vía API para garantizar aislamiento
-    const createRes = await page.evaluate(async (name: string) => {
-      const r = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: "Test BUG-54", region: "Madrid" }),
-      });
-      return r.ok ? (r.json() as Promise<{ id: string; name: string }>) : null;
-    }, testProjectName);
-
-    if (!createRes) return; // seed DB sin soporte, skip
-    createdProjectId = createRes.id;
-
-    // Ir a /projects y seleccionar el proyecto recién creado
-    await page.goto("/projects");
-    await expect(page.locator('[data-testid="projects-table"]')).toBeVisible({ timeout: 10_000 });
-
-    // Buscar la fila del proyecto creado por nombre
-    const targetRow = page.locator('[data-testid="project-row"]').filter({
-      has: page.locator(`td:first-child:has-text("${testProjectName}")`),
-    });
-    await expect(targetRow).toBeVisible({ timeout: 5_000 });
-    await targetRow.locator('[data-testid="btn-select-project"]').click();
-
-    // Debe redirigir a / y el badge debe mostrar el proyecto seleccionado
-    await page.waitForURL("/", { timeout: 10_000 });
-
-    const badge = page.locator('[data-testid="active-project-badge"]');
-    await expect(badge).toBeVisible({ timeout: 10_000 });
-    await expect(badge).toContainText(testProjectName);
-
-    // Recargar — el validation effect vuelve a ejecutarse.
-    // Con el fix de BUG-54, el proyecto debe mantenerse (no resetearse al primero).
-    await page.reload();
-    await page.waitForURL("/", { timeout: 10_000 });
-    await expect(badge).toBeVisible({ timeout: 10_000 });
-    await expect(badge).toContainText(testProjectName);
-  } catch (error) {
-    await screenshotOnFail(page, "CP-159");
-    throw error;
-  } finally {
-    // Cleanup: eliminar el proyecto de prueba
-    if (createdProjectId) {
-      await page.evaluate(async (id: string) => {
-        await fetch(`/api/projects/${id}`, { method: "DELETE" }).catch(() => {});
-      }, createdProjectId);
-    }
-  }
-});
-
 // ── Feature: fila del usuario logado resaltada en vista ampliada ───────────────
 
 test("CP-160 — La fila del empleado logado está resaltada en la vista ampliada @smoke", async ({
@@ -151,16 +85,7 @@ test("CP-160 — La fila del empleado logado está resaltada en la vista ampliad
 
     // Generate schedule so there is data (needed to display grid with employees)
     // If it fails (not admin), we continue — just need employees visible
-    const projectId = await page.evaluate(() => {
-      try {
-        const data = localStorage.getItem("activeProject");
-        return data ? (JSON.parse(data) as { id: string }).id : "";
-      } catch {
-        return "";
-      }
-    });
-
-    if (!projectId) return;
+    // No projectId needed in single-project mode
 
     const now = new Date();
     await page.goto(
@@ -226,16 +151,7 @@ test("CP-161 — Los festivos se marcan en rojo en la cabecera de la vista ampli
       });
     });
 
-    const projectId = await page.evaluate(() => {
-      try {
-        const data = localStorage.getItem("activeProject");
-        return data ? (JSON.parse(data) as { id: string }).id : "";
-      } catch {
-        return "";
-      }
-    });
-
-    if (!projectId) return;
+    // No projectId needed in single-project mode
 
     await page.goto(
       `/multi-month?projectId=${projectId}&year=${year}&month=${month}`
@@ -253,33 +169,4 @@ test("CP-161 — Los festivos se marcan en rojo en la cabecera de la vista ampli
   }
 });
 
-// ── BUG-55: PROJECT_ADMIN ve el PrepPanel (Generar, Vacaciones, etc.) ──────────
-
-test("CP-162 — PROJECT_ADMIN tiene acceso al PrepPanel (Generar cuadrante) @smoke", async ({ page }) => {
-  try {
-    await loginAsPM(page);
-    await expect(page).toHaveURL("/", { timeout: 10_000 });
-
-    // Esperar a que la página cargue
-    await page.waitForLoadState("networkidle");
-
-    // El PrepPanel debe estar visible
-    const prepPanel = page.locator('[data-testid="prep-panel"]');
-    await expect(prepPanel).toBeVisible({ timeout: 10_000 });
-
-    // El botón "Generar cuadrante" debe estar presente (usa testid específico)
-    const generateBtn = page.locator('[data-testid="btn-generate"]');
-    await expect(generateBtn).toBeVisible({ timeout: 5_000 });
-
-    // El paso "Vacaciones" también debe estar presente
-    const vacacionesStep = page.locator('[data-testid="prep-step-vacaciones"]');
-    await expect(vacacionesStep).toBeVisible({ timeout: 5_000 });
-
-    // El modo edición debe estar activo (canEdit = true para PROJECT_ADMIN)
-    const editModeBanner = page.locator('[data-testid="edit-mode-banner"]');
-    await expect(editModeBanner).toBeVisible({ timeout: 5_000 });
-  } catch (error) {
-    await screenshotOnFail(page, "CP-162");
-    throw error;
-  }
-});
+// ── Feature: festivos marcados en cabecera de vista ampliada ───────────────────

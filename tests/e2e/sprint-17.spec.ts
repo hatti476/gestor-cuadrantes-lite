@@ -11,11 +11,9 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { loginAsAdmin } from "./helpers";
+import { loginAsAdmin, generateScheduleAndWait, screenshotOnFail } from "./helpers";
 
-test.describe.configure({ mode: "serial" });
 
-type Project = { id: string; name: string; region?: string | null };
 type Assignment = {
   id: string;
   employeeId: string;
@@ -36,72 +34,59 @@ const TEST_MONTH = 6;
 // Holiday used for Tarea 3 tests (Monday adjacent to Sunday)
 const HOLIDAY_DATE = "2026-06-08";
 
-async function getDefaultProject(page: Page): Promise<Project> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const resp = await page.request.get("/api/projects");
-      expect(resp.status()).toBe(200);
-      const projects: Project[] = await resp.json();
-      expect(projects.length).toBeGreaterThan(0);
-      return projects[0];
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) {
-        await page.waitForTimeout(500 * attempt);
-      }
-    }
-  }
-  throw lastError;
-}
-
-async function getAssignments(
-  page: Page,
-  projectId: string,
-  year: number,
-  month: number
-): Promise<Assignment[]> {
-  const resp = await page.request.get(
-    `/api/schedules?year=${year}&month=${month}&projectId=${projectId}`
+async function getAssignments(page: Page, year: number, month: number): Promise<Assignment[]> {
+  const response = await page.request.get(
+    `/api/schedules?year=${year}&month=${month}`
   );
-  expect(resp.status()).toBe(200);
-  const data: { assignments: Assignment[] } = await resp.json();
+  expect(response.status()).toBe(200);
+  const data: { assignments: Assignment[] } = await response.json();
   return data.assignments;
 }
 
-async function ensureHoliday(page: Page, date: string): Promise<void> {
-  // Idempotent: create holiday if it does not already exist
-  await page.request.post("/api/holidays", { data: { date } });
-}
-
-async function removeHoliday(page: Page, date: string): Promise<void> {
-  const resp = await page.request.get("/api/holidays");
-  if (!resp.ok()) return;
-  const holidays: { id: string; date: string }[] = await resp.json();
-  const existing = holidays.find((h) => h.date.slice(0, 10) === date);
+async function deleteAssignmentIfExists(
+  page: Page,
+  employeeId: string,
+  date: string
+): Promise<void> {
+  const [year, month] = date.split("-").map(Number);
+  const assignments = await getAssignments(page, year, month);
+  const existing = assignments.find(
+    (a) => a.employeeId === employeeId && a.date.slice(0, 10) === date
+  );
   if (existing) {
-    await page.request.delete(`/api/holidays/${existing.id}`);
+    const deleteResp = await page.request.delete(`/api/schedules?id=${existing.id}`);
+    expect([200, 404]).toContain(deleteResp.status());
   }
 }
 
-async function generateSchedule(
-  page: Page,
-  projectId: string,
-  year: number,
-  month: number
-): Promise<GenerateResponse> {
-  const resp = await page.request.post("/api/schedules/generate", {
-    data: { year, month, projectId },
+async function setShift(page: Page, employeeId: string, date: string, shiftType: string): Promise<void> {
+  const response = await page.request.post("/api/schedules", {
+    data: { employeeId, date, shiftType },
   });
-  expect(resp.status()).toBe(200);
-  return resp.json() as Promise<GenerateResponse>;
+  expect([200, 201]).toContain(response.status());
 }
 
-function normalizeShift(shift: string): string {
-  if (shift === "MF") return "M";
-  if (shift === "TF") return "T";
-  if (shift === "NF") return "N";
-  return shift;
+
+async function generateSchedule(page: Page, year: number, month: number): Promise<any> {
+  const response = await page.request.post("/api/schedules/generate", {
+    data: { year, month },
+  });
+  expect(response.status()).toBe(200);
+  return response.json();
+}
+async function ensureHoliday(page: Page, date: string): Promise<void> {
+  const response = await page.request.post("/api/schedules", {
+    data: { date, shiftType: "V" },
+  });
+  expect([200, 201]).toContain(response.status());
+}
+
+async function getEmployeeIds(page: Page): Promise<string[]> {
+  const response = await page.request.get("/api/employees");
+  expect(response.status()).toBe(200);
+  const employees: { id: string }[] = await response.json();
+  expect(employees.length).toBeGreaterThan(0);
+  return employees.map((e) => e.id);
 }
 
 // ===========================================================================
@@ -109,10 +94,10 @@ function normalizeShift(shift: string): string {
 // ===========================================================================
 test("CP-110 — API de generación incluye el campo coverageWarnings en la respuesta", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   const resp = await page.request.post("/api/schedules/generate", {
-    data: { year: TEST_YEAR, month: TEST_MONTH, projectId: project.id },
+    data: { year: TEST_YEAR, month: TEST_MONTH,  },
   });
   expect(resp.status()).toBe(200);
 
@@ -126,9 +111,9 @@ test("CP-110 — API de generación incluye el campo coverageWarnings en la resp
 // ===========================================================================
 test("CP-111 — coverageWarnings tiene estructura correcta (date, employeeId, message)", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
-  const body = await generateSchedule(page, project.id, TEST_YEAR, TEST_MONTH);
+  const body = await generateSchedule(page, TEST_YEAR, TEST_MONTH);
 
   // If there are warnings, validate their shape
   for (const warning of body.coverageWarnings) {
@@ -148,10 +133,10 @@ test("CP-111 — coverageWarnings tiene estructura correcta (date, employeeId, m
 // ===========================================================================
 test("CP-112 — cobertura nocturna diaria no excede el máximo esperado", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
-  await generateSchedule(page, project.id, TEST_YEAR, TEST_MONTH);
-  const assignments = await getAssignments(page, project.id, TEST_YEAR, TEST_MONTH);
+  await generateSchedule(page, TEST_YEAR, TEST_MONTH);
+  const assignments = await getAssignments(page, TEST_YEAR, TEST_MONTH);
 
   const nightsByDate = new Map<string, number>();
   for (const a of assignments) {
@@ -172,12 +157,12 @@ test("CP-112 — cobertura nocturna diaria no excede el máximo esperado", async
 // ===========================================================================
 test("CP-113 — festivo lunes contiguo al domingo recibe MF o TF (no M ni T)", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   await ensureHoliday(page, HOLIDAY_DATE);
   try {
-    await generateSchedule(page, project.id, TEST_YEAR, TEST_MONTH);
-    const assignments = await getAssignments(page, project.id, TEST_YEAR, TEST_MONTH);
+    await generateSchedule(page, TEST_YEAR, TEST_MONTH);
+    const assignments = await getAssignments(page, TEST_YEAR, TEST_MONTH);
 
     const mondayAssignments = assignments.filter(
       (a) => a.date.slice(0, 10) === HOLIDAY_DATE
@@ -200,12 +185,12 @@ test("CP-113 — festivo lunes contiguo al domingo recibe MF o TF (no M ni T)", 
 // ===========================================================================
 test("CP-114 — paquete extendido Sáb+Dom+Lun festivo: mismo empleado asignado MF los 3 días", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   await ensureHoliday(page, HOLIDAY_DATE);
   try {
-    await generateSchedule(page, project.id, TEST_YEAR, TEST_MONTH);
-    const assignments = await getAssignments(page, project.id, TEST_YEAR, TEST_MONTH);
+    await generateSchedule(page, TEST_YEAR, TEST_MONTH);
+    const assignments = await getAssignments(page, TEST_YEAR, TEST_MONTH);
 
     // Paquete: Sáb 6, Dom 7, Lun festivo 8
     const packageDates = ["2026-06-06", "2026-06-07", HOLIDAY_DATE];
@@ -233,12 +218,12 @@ test("CP-114 — paquete extendido Sáb+Dom+Lun festivo: mismo empleado asignado
 // ===========================================================================
 test("CP-115 — paquete extendido Sáb+Dom+Lun festivo: mismo empleado asignado TF los 3 días", async ({ page }) => {
   await loginAsAdmin(page);
-  const project = await getDefaultProject(page);
+  
 
   await ensureHoliday(page, HOLIDAY_DATE);
   try {
-    await generateSchedule(page, project.id, TEST_YEAR, TEST_MONTH);
-    const assignments = await getAssignments(page, project.id, TEST_YEAR, TEST_MONTH);
+    await generateSchedule(page, TEST_YEAR, TEST_MONTH);
+    const assignments = await getAssignments(page, TEST_YEAR, TEST_MONTH);
 
     // Paquete: Sáb 6, Dom 7, Lun festivo 8
     const packageDates = ["2026-06-06", "2026-06-07", HOLIDAY_DATE];

@@ -2,8 +2,14 @@
  * Lógica de negocio para empleados — funciones puras y testeables.
  */
 
-export const VALID_ROLES = ["SUPER_ADMIN", "USER"] as const;
-export type ValidRole = (typeof VALID_ROLES)[number];
+import { ROLES, type Role } from "@/lib/auth/permissions";
+
+// Fuente de verdad única: los roles viven en lib/auth/permissions.ts.
+// Antes esto declaraba ["SUPER_ADMIN", "USER"] (roles eliminados en el Sprint 1),
+// lo que hacia inalcanzable POST /api/employees: esta validacion exigia los roles
+// viejos y la del endpoint exigia TECNICO, condiciones mutuamente excluyentes.
+export const VALID_ROLES = ROLES;
+export type ValidRole = Role;
 
 export const VALID_SHIFT_PREFERENCES = ["M", "T", "J", null] as const;
 export type ValidShiftPreference = (typeof VALID_SHIFT_PREFERENCES)[number];
