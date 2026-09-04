@@ -227,7 +227,7 @@ test("CP-75 — TECH (TECNICO) no puede editar celdas del cuadrante", async ({ p
 test("CP-77 — Tabla de contadores debajo del grid muestra totales correctos @smoke", async ({ page }) => {
   test.setTimeout(90_000);
   try {
-    await loginAsRole(page, "super_admin");
+    await loginAsRole(page, "admin");
     await page.goto(ROUTES.home);
     await page.waitForLoadState("networkidle");
     await waitForScheduleGrid(page);

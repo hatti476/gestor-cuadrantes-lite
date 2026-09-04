@@ -95,7 +95,7 @@ test("CP-14 — Admin puede asignar un turno @smoke", async ({ page }) => {
 test("CP-15 — Admin puede cambiar un turno existente", async ({ page }) => {
   test.setTimeout(60_000);
   try {
-    await loginAsRole(page, "super_admin");
+    await loginAsRole(page, "admin");
     await waitForScheduleGrid(page);
 
     // Buscar una celda editable que no sea V/B (evita celdas bloqueadas de preparación).

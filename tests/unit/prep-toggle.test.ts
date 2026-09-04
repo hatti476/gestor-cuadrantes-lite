@@ -77,7 +77,7 @@ describe("Prep Toggle Logic (Bug 1: handleCellClick with prepStep)", () => {
     vi.useFakeTimers();
     mockFetch = vi.spyOn(global, "fetch").mockImplementation(mockFetchImpl);
     loadScheduleCalls = 0;
-    (globalThis as unknown as { __prevShiftBeforePrep: Map<string, string | undefined> }).__prevShiftBeforePrep = new Map();
+    (globalThis as { __prevShiftBeforePrep?: Map<string, string | undefined> }).__prevShiftBeforePrep = new Map();
   });
 
   afterEach(() => {
@@ -100,8 +100,9 @@ describe("Prep Toggle Logic (Bug 1: handleCellClick with prepStep)", () => {
       const currentCellShift = found?.shiftType;
 
       // Simular prevShiftBeforePrep state
-      const prevShiftMap = (globalThis as unknown as { __prevShiftBeforePrep: Map<string, string | undefined> }).__prevShiftBeforePrep || new Map();
-      (globalThis as unknown as { __prevShiftBeforePrep: Map<string, string | undefined> }).__prevShiftBeforePrep = prevShiftMap;
+      const globalWithState = globalThis as { __prevShiftBeforePrep?: Map<string, string | undefined> };
+      const prevShiftMap = globalWithState.__prevShiftBeforePrep ?? new Map();
+      globalWithState.__prevShiftBeforePrep = prevShiftMap;
 
       if (currentCellShift === shiftType) {
         // Click 2+: la celda ya tiene el turno de prep → restaurar estado anterior

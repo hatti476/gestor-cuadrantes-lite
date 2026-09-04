@@ -88,7 +88,7 @@ test("CP-67 — Generar cuadrante respeta turnos manuales previos", async ({ pag
 test("CP-68 — Generar cuadrante respeta vacaciones introducidas", async ({ page }) => {
   test.setTimeout(90_000);
   try {
-    await loginAsRole(page, "super_admin");
+    await loginAsRole(page, "admin");
     await waitForScheduleGrid(page);
 
     // Navegar a Septiembre 2026 (4 nexts desde Mayo)

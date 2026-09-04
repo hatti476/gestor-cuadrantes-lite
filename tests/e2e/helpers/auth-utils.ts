@@ -8,11 +8,7 @@ import { ROUTES } from "../config";
 import { login } from "../helpers";
 import { TEST_USERS } from "../fixtures/users";
 
-export type TestRole =
-  | "super_admin"
-  | "project_admin"
-  | "super_viewer"
-  | "viewer";
+export type TestRole = "admin" | "tech" | "viewer";
 
 export async function loginAs(page: Page, role: TestRole): Promise<void> {
   const creds = TEST_USERS[role];

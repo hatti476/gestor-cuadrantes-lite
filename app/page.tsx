@@ -248,7 +248,8 @@ export default function HomePage() {
 
   // Limpiar prevShiftBeforePrep al cambiar de mes o salir de modo prep
   useEffect(() => {
-    setPrevShiftBeforePrep(new Map());
+    // eslint-disable-next-line
+    setPrevShiftBeforePrep(() => new Map());
   }, [year, month, prepStep]);
 
   // ---------------------------------------------------------------------------
